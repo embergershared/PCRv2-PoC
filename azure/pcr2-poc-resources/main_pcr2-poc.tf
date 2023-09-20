@@ -741,9 +741,10 @@ resource "azurerm_key_vault" "kv" {
   enabled_for_disk_encryption     = false
   enabled_for_template_deployment = false
   enabled_for_deployment          = false
+  public_network_access_enabled   = false
 
   network_acls {
-    bypass         = "AzureServices"
+    bypass         = "None" # "AzureServices"
     default_action = "Deny"
     ip_rules       = [] # [module.publicip.public_ip]
     # virtual_network_subnet_ids = var.virtual_network_subnet_ids
