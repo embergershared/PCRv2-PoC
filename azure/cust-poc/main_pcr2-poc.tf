@@ -276,6 +276,35 @@ resource "azurerm_subnet_nat_gateway_association" "appsvc_int_natgw_snet_associa
   subnet_id      = azurerm_subnet.appsvc_int_subnet.id
   nat_gateway_id = azurerm_nat_gateway.appsvc_int_natgw.id
 }
+#   / Network Security Group for VNet integration' subnet
+resource "azurerm_network_security_group" "vnet_int_subnet_nsg" {
+  name = lower("nsg-${azurerm_subnet.appsvc_int_subnet.name}")
+
+  resource_group_name = module.mainregion_poc_rg.name
+  location            = module.mainregion_poc_rg.location
+
+  tags = local.base_tags
+  lifecycle { ignore_changes = [tags["BuiltOn"]] }
+}
+resource "azurerm_subnet_network_security_group_association" "vnet_int_subnet_to_nsg_association" {
+  subnet_id                 = azurerm_subnet.appsvc_int_subnet.id
+  network_security_group_id = azurerm_network_security_group.vnet_int_subnet_nsg.id
+}
+#   / Network Security Group for Private endpoints' subnet
+resource "azurerm_network_security_group" "pe_subnet_nsg" {
+  name = lower("nsg-${azurerm_subnet.pe_subnet.name}")
+
+  resource_group_name = module.mainregion_poc_rg.name
+  location            = module.mainregion_poc_rg.location
+
+  tags = local.base_tags
+  lifecycle { ignore_changes = [tags["BuiltOn"]] }
+}
+resource "azurerm_subnet_network_security_group_association" "pe_subnet_to_nsg_association" {
+  subnet_id                 = azurerm_subnet.pe_subnet.id
+  network_security_group_id = azurerm_network_security_group.pe_subnet_nsg.id
+}
+
 
 #--------------------------------------------------------------
 #   Application Service Telemetry
@@ -733,10 +762,10 @@ module "kv_local_pe" {
 
   depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
 
-  resource_id         = azurerm_key_vault.kv.id
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
+  resource_id = azurerm_key_vault.kv.id
 
+  resource_group_name  = module.mainregion_poc_rg.name
+  location             = module.mainregion_poc_rg.location
   subnet_id            = azurerm_subnet.pe_subnet.id
   subresource_names    = ["vault"]
   is_manual_connection = false
@@ -747,6 +776,32 @@ module "kv_local_pe" {
   ttl             = 10
 
   tags = local.base_tags
+}
+#   / Create an external Private Endpoint to access KV data plane from terraform
+module "kv_external_pe" {
+  providers = { azurerm = azurerm.external }
+  source    = "../../terraform-modules/pe"
+
+  resource_id = azurerm_key_vault.kv.id
+
+  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+  location             = data.azurerm_virtual_network.external_vnet.location
+  subnet_id            = data.azurerm_subnet.external_subnet.id
+  subresource_names    = ["vault"]
+  is_manual_connection = false
+
+  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  cname_zone      = "vault.azure.net"
+  a_zone          = "vaultcore.azure.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+#   / Create a secret
+resource "azurerm_key_vault_secret" "spn_pwd_secret" {
+  name         = azuread_application.azsp_app.display_name
+  key_vault_id = azurerm_key_vault.kv.id
+  value        = azuread_application_password.azsp_app_pwd.value
 }
 
 #--------------------------------------------------------------
@@ -847,7 +902,10 @@ resource "azurerm_windows_web_app" "poc_app_svc" {
     "XDT_MicrosoftApplicationInsights_PreemptSdk"     = "disabled"
 
     # Authentication
-    "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET" = azuread_application_password.azsp_app_pwd.value
+    # App setting populated by Terraform:
+    # "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET" = azuread_application_password.azsp_app_pwd.value
+    # Secret pulled from Key vault directly. Ref: https://learn.microsoft.com/en-us/azure/app-service/app-service-key-vault-references?tabs=azure-cli
+    "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET" = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.kv.name};SecretName=${azurerm_key_vault_secret.spn_pwd_secret.name})"
 
     # Drop Storage Account / Container
     "DropStorageAccountName" = azurerm_storage_account.drop_st.name
@@ -957,6 +1015,13 @@ resource "azurerm_role_assignment" "webapp_msi_app_svc_st_blob_contributor" {
   role_definition_name = "Storage Blob Data Contributor"
   scope                = azurerm_storage_account.app_svc_st.id
 }
+#   / Role Assignment for Win Web App MSI on Key vault
+resource "azurerm_role_assignment" "webapp_msi_kv_secret_user" {
+  principal_id         = azurerm_windows_web_app.poc_app_svc.identity[0].principal_id
+  role_definition_name = "Key Vault Secrets User"
+  scope                = azurerm_key_vault.kv.id
+}
+
 
 #     ========  WIN WEB APP POST DEPLOYMENT STEPS  ========
 
@@ -1125,6 +1190,13 @@ resource "azurerm_role_assignment" "funcapp_msi_archive_st_blob_contributor" {
 #   role_definition_name = "Storage Blob Data Contributor"
 #   scope                = azurerm_storage_account.app_svc_st.id
 # }
+#   / Role Assignment for Win Web App MSI on Key vault
+resource "azurerm_role_assignment" "funcapp_msi_kv_secret_user" {
+  principal_id         = azurerm_windows_function_app.win_func_app.identity[0].principal_id
+  role_definition_name = "Key Vault Secrets User"
+  scope                = azurerm_key_vault.kv.id
+}
+
 
 #     ========  FUNCTION APP POST DEPLOYMENT STEPS  ========
 
