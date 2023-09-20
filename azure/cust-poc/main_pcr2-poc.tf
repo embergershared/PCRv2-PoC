@@ -1,13 +1,15 @@
-# Description   : This Terraform creates an Resource Group and resources for the Zachry PoC
+# Description   : This Terraform creates an Resource Group and resources for the PCRv2 PoC
 #                 It deploys:
 #                   - 1 Resource Group,
-#                   - 1 VNet, 2 subnets
+#                   - 1 VNet, 2 subnets, a NAT Gateway
 #                   - 1 LAW + 1 App Insights
-#                   - 1 App Service Plan + 1 Windows Web App
+#                   - Storage Accounts for blobs processing
+#                   - 1 App Service Plan + 1 Windows Web App + 1 Function App
+#                   - Multiple Private DNS Zones and Endpoints for secure isolated connections
 #
 
 # Folder/File   : /azure/cust-poc/main_pcr2-poc.tf
-# Terraform     : 1.0.+
+# Terraform     : 1.5.+
 # Providers     : azurerm 3.+
 # Plugins       : none
 # Modules       : none
@@ -16,7 +18,7 @@
 # Created by    : Emmanuel
 # Last Modified : 2023-09-19
 # Last Modif by : Emmanuel
-# Modif desc.   : Move Application to another Subscription
+# Modif desc.   : Move all resources in another Subscription
 #
 # Required Resource Providers:
 # - Microsoft.Network
@@ -25,15 +27,8 @@
 # - Microsoft.KeyVault
 
 # IMPORTANT NOTE:
-#   The Private DNS Zone azurewebsites.net will require 3 entries:
-#   - Obvious:
-#   webapp-win-${local.full_suffix}      CNAME   webapp-win-${local.full_suffix}.privatelink.azurewebsites.net
-#   - SCM for management and deployment from VS/Pipeline:
-#   webapp-win-${local.full_suffix}.scm  CNAME   webapp-win-${local.full_suffix}.privatelink.azurewebsites.net
-#   - SSO redirection to access SCM:
-#   waws-prod-bn1-111.sso           CNAME   webapp-win-${local.full_suffix}.privatelink.azurewebsites.net
-#
 #   Remote Debugger Visual Studio 2022 to App Service / Function App requires "Allow public access" (can be restricted to few IPs)
+#   This is a documented limitation
 
 
 #--------------------------------------------------------------
