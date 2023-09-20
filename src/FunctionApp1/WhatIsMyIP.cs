@@ -1,6 +1,7 @@
 using System;
 using System.Net.Http;
 using System.Threading.Tasks;
+using FunctionApp1.Helpers;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Extensions.Logging;
 
@@ -11,11 +12,11 @@ namespace FunctionApp1
         [FunctionName("WhatIsMyIP")]
         public async Task Run([TimerTrigger("*/10 * * * * *")] TimerInfo myTimer, ILogger log)
         {
-            log.LogInformation($"C# Timer trigger function executed at: {DateTime.Now}");
+            Output.Log(log,$"C# Timer triggered function \"WhatIsMyIP\" STARTED at: {DateTime.Now}");
 
-            log.LogInformation("Querying the Public IP");
+            Output.Log(log,"Querying the Public IP");
 
-            log.LogInformation("   Using HttpClient");
+            Output.Log(log,"   Using HttpClient");
 
             HttpClient httpClient = new()
             {
@@ -28,14 +29,16 @@ namespace FunctionApp1
             //.WriteRequestToConsole();
             var body = await response.Content.ReadAsStringAsync();
 
-            Console.WriteLine($"[Console] The Public IP seen is: {body}");
-            log.LogInformation($"[Log] The Public IP seen is: {body}");
+            Output.Log(log, $"The Public IP seen is: {body}");
 
-            //log.LogInformation("   Using WebClient");
+
+            //Output.Log(log,"   Using WebClient");
             //var client = new WebClient();
             //var content = client.DownloadString("http://icanhazip.com/");
 
-            //log.LogInformation($"The Public IP of this function app is: {content}");
+            //Output.Log(log,$"The Public IP of this function app is: {content}");
+
+            Output.Log(log,$"C# Timer triggered function \"WhatIsMyIP\" FINISHED at: {DateTime.Now}");
         }
     }
 
@@ -49,7 +52,7 @@ namespace FunctionApp1
             }
 
             var request = response.RequestMessage;
-            log.LogInformation($"{request?.Method} " + $"{request?.RequestUri} " + $"HTTP/{request?.Version}" + "\n");
+            Output.Log(log,$"{request?.Method} " + $"{request?.RequestUri} " + $"HTTP/{request?.Version}" + "\n");
             //            Console.Write($"{request?.Method} ");
             //            Console.Write($"{request?.RequestUri} ");
             //            Console.WriteLine($"HTTP/{request?.Version}");

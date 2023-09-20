@@ -1071,8 +1071,11 @@ resource "azurerm_windows_function_app" "win_func_app" {
     application_insights_connection_string = azurerm_application_insights.poc_appins.connection_string
     application_insights_key               = azurerm_application_insights.poc_appins.instrumentation_key
   }
+
   connection_string {
-    name  = "WebApp1EfDbContext-MI"
+    # Used with input and output bindings
+    # Ref: https://learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-azure-sql?tabs=in-process%2Cextensionv4&pivots=programming-language-csharp
+    name  = "FuncApp1EfDbContext-CS"
     type  = "SQLServer"
     value = "Server=tcp:${azurerm_mssql_server.poc_sql_server.name}.database.windows.net,1433;Authentication=Active Directory Default;Database=${azurerm_mssql_database.poc_sql_db.name};"
   }
@@ -1105,6 +1108,9 @@ resource "azurerm_windows_function_app" "win_func_app" {
     # Archive Storage Account / Container
     "ArchiveStorageAccountName" = azurerm_storage_account.archive_st.name
     "ArchiveContainerName"      = azurerm_storage_container.cy_container.name
+
+    # QueryDatabase Connection string (used with Dependency Injection and Entity Framework)
+    "FuncApp1EfDbContext-AS" = "Server=tcp:${azurerm_mssql_server.poc_sql_server.name}.database.windows.net,1433;Authentication=Active Directory Default;Database=${azurerm_mssql_database.poc_sql_db.name};"
 
     # Functions Enable/Disable
     "AzureWebJobs.InputFilesProcessor.Disabled" = "1"
