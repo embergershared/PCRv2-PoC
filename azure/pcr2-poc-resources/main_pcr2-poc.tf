@@ -8,7 +8,7 @@
 #                   - Multiple Private DNS Zones and Endpoints for secure isolated connections
 #
 
-# Folder/File   : /azure/cust-poc/main_pcr2-poc.tf
+# Folder/File   : /azure/pcr2-poc-resources/main_pcr2-poc.tf
 # Terraform     : 1.5.+
 # Providers     : azurerm 3.+
 # Plugins       : none
@@ -98,7 +98,7 @@ data "azurerm_client_config" "current" {}
 resource "time_static" "this" {}
 locals {
   # Plan Tag value
-  tf_plan = "/azure/cust-poc/main_pcr2-poc.tf"
+  tf_plan = "/azure/pcr2-poc-resources/main_pcr2-poc.tf"
 
   # Dates formatted
   UTC_to_TZ   = "-4h" # Careful to factor DST
@@ -411,7 +411,7 @@ resource "azurerm_mssql_database" "poc_sql_db" {
   sku_name     = "S0"
 }
 module "sqlsvr_local_pe" {
-  source     = "../../terraform-modules/pe"
+  source     = "../terraform-modules/pe"
   depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
 
   resource_id         = azurerm_mssql_server.poc_sql_server.id
@@ -431,7 +431,7 @@ module "sqlsvr_local_pe" {
 }
 module "sqlsvr_external_pe" {
   providers = { azurerm = azurerm.external }
-  source    = "../../terraform-modules/pe"
+  source    = "../terraform-modules/pe"
 
   resource_id = azurerm_mssql_server.poc_sql_server.id
 
@@ -490,7 +490,7 @@ resource "azurerm_storage_container" "mft_drop" {
   container_access_type = "private"
 }
 module "drop_st_local_pe" {
-  source     = "../../terraform-modules/pe"
+  source     = "../terraform-modules/pe"
   depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
 
   resource_id         = azurerm_storage_account.drop_st.id
@@ -510,7 +510,7 @@ module "drop_st_local_pe" {
 }
 module "drop_st_external_pe" {
   providers = { azurerm = azurerm.external }
-  source    = "../../terraform-modules/pe"
+  source    = "../terraform-modules/pe"
 
   resource_id = azurerm_storage_account.drop_st.id
 
@@ -571,7 +571,7 @@ resource "azurerm_storage_container" "andet_container" {
   container_access_type = "private"
 }
 module "archive_st_local_pe" {
-  source     = "../../terraform-modules/pe"
+  source     = "../terraform-modules/pe"
   depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
 
   resource_id         = azurerm_storage_account.archive_st.id
@@ -591,7 +591,7 @@ module "archive_st_local_pe" {
 }
 module "archive_st_external_pe" {
   providers = { azurerm = azurerm.external }
-  source    = "../../terraform-modules/pe"
+  source    = "../terraform-modules/pe"
 
   resource_id = azurerm_storage_account.archive_st.id
 
@@ -647,7 +647,7 @@ resource "azurerm_storage_container" "winwebapp_logs_container" {
   container_access_type = "private"
 }
 module "app_svc_st_local_pe" {
-  source     = "../../terraform-modules/pe"
+  source     = "../terraform-modules/pe"
   depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
 
   resource_id         = azurerm_storage_account.app_svc_st.id
@@ -667,7 +667,7 @@ module "app_svc_st_local_pe" {
 }
 module "app_svc_st_external_pe" {
   providers = { azurerm = azurerm.external }
-  source    = "../../terraform-modules/pe"
+  source    = "../terraform-modules/pe"
 
   resource_id = azurerm_storage_account.app_svc_st.id
 
@@ -706,7 +706,7 @@ resource "azurerm_cognitive_account" "anomaly_detector" {
   }
 }
 module "anomaly_detector_local_pe" {
-  source = "../../terraform-modules/pe"
+  source = "../terraform-modules/pe"
 
   depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
 
@@ -758,7 +758,7 @@ resource "azurerm_role_assignment" "terraform_role_to_kv_assignment" {
   principal_id         = data.azurerm_client_config.current.object_id
 }
 module "kv_local_pe" {
-  source = "../../terraform-modules/pe"
+  source = "../terraform-modules/pe"
 
   depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
 
@@ -780,7 +780,7 @@ module "kv_local_pe" {
 #   / Create an external Private Endpoint to access KV data plane from terraform
 module "kv_external_pe" {
   providers = { azurerm = azurerm.external }
-  source    = "../../terraform-modules/pe"
+  source    = "../terraform-modules/pe"
 
   resource_id = azurerm_key_vault.kv.id
 
@@ -965,7 +965,7 @@ resource "azurerm_windows_web_app" "poc_app_svc" {
 #   / Private Endpoint for External incoming connections
 module "appsvc_external_pe" {
   providers = { azurerm = azurerm.external }
-  source    = "../../terraform-modules/pe"
+  source    = "../terraform-modules/pe"
 
   resource_id = azurerm_windows_web_app.poc_app_svc.id
 
@@ -984,7 +984,7 @@ module "appsvc_external_pe" {
 }
 #   / Private DNS entry for SCM for External incoming connections
 module "appsvc_scm_external_privdns" {
-  source    = "../../terraform-modules/pe-dns"
+  source    = "../terraform-modules/pe-dns"
   providers = { azurerm = azurerm.external }
 
   record_name        = "${azurerm_windows_web_app.poc_app_svc.name}.scm"
@@ -1141,7 +1141,7 @@ resource "azurerm_windows_function_app" "win_func_app" {
 }
 module "function_external_pe" {
   providers = { azurerm = azurerm.external }
-  source    = "../../terraform-modules/pe"
+  source    = "../terraform-modules/pe"
 
   resource_id = azurerm_windows_function_app.win_func_app.id
 
@@ -1159,7 +1159,7 @@ module "function_external_pe" {
   tags = local.base_tags
 }
 module "function_scm_external_privdns" {
-  source    = "../../terraform-modules/pe-dns"
+  source    = "../terraform-modules/pe-dns"
   providers = { azurerm = azurerm.external }
 
   record_name        = "${azurerm_windows_function_app.win_func_app.name}.scm"
