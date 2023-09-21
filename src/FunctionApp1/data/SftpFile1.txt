@@ -1,0 +1,1 @@
+SftpFile1.txt: Is an empty file located in the SFTP server.

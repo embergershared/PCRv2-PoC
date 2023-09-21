@@ -32,66 +32,6 @@
 
 
 #--------------------------------------------------------------
-#   Terraform providers
-#--------------------------------------------------------------
-terraform {
-  required_version = ">=1.0"
-
-  required_providers {
-    azurerm = {
-      # https://registry.terraform.io/providers/hashicorp/azurerm/latest
-      source  = "hashicorp/azurerm"
-      version = ">=3.0"
-    }
-    azuread = {
-      # https://registry.terraform.io/providers/hashicorp/azuread/latest
-      source  = "hashicorp/azuread"
-      version = ">= 2.0"
-    }
-  }
-}
-provider "azurerm" {
-  tenant_id       = var.tenant_id
-  subscription_id = var.subscription_id
-  client_id       = var.client_id
-  client_secret   = var.client_secret
-
-  skip_provider_registration = true
-  storage_use_azuread        = true
-
-  features {
-    resource_group {
-      prevent_deletion_if_contains_resources = false
-    }
-  }
-}
-provider "azurerm" {
-  alias = "external"
-
-  tenant_id       = var.tenant_id
-  subscription_id = var.external_subscription_id
-  client_id       = var.client_id
-  client_secret   = var.client_secret
-
-  skip_provider_registration = true
-  storage_use_azuread        = true
-
-  features {
-    resource_group {
-      prevent_deletion_if_contains_resources = false
-    }
-  }
-}
-provider "azuread" {
-  # To App registration creation = use of azsp module,
-  # The following API Permissions must be added to the Terraform Service Principal:
-  #   Application.ReadWrite.All + Grant admin consent
-  #   When authenticated with a user principal, azuread_application requires one of the following directory roles: Application Administrator or Global Administrator
-  #
-  # More info here: https://registry.terraform.io/providers/hashicorp/azuread/latest/docs/resources/application
-}
-
-#--------------------------------------------------------------
 #   Plan's Locals and specific resources
 #--------------------------------------------------------------
 data "azurerm_client_config" "current" {}
@@ -132,19 +72,6 @@ locals {
     local.fixed_tags,
   )
 }
-
-#--------------------------------------------------------------
-#   Variables
-#--------------------------------------------------------------
-variable "tenant_id" {}
-variable "subscription_id" {}
-variable "client_id" {}
-variable "client_secret" {}
-variable "subsc_nickname" {}
-variable "subsc_adm_short" {}
-variable "main_region_code" { default = null }
-variable "external_subscription_id" {}
-variable "external_snet_pe_id" {}
 
 #--------------------------------------------------------------
 #   External Subscription Subnet for External PEs
@@ -465,7 +392,7 @@ resource "azurerm_storage_account" "drop_st" {
   allow_nested_items_to_be_public = false    #Disable anonymous public read access to containers and blobs
   enable_https_traffic_only       = true     #Require secure transfer (HTTPS) to the storage account for REST API Operations
   min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
-  is_hns_enabled                  = true     #Enables Hierachical namespace, enabling SFTP
+  is_hns_enabled                  = false    #Enables Hierachical namespace, required for SFTP
   sftp_enabled                    = false
   public_network_access_enabled   = false
 
@@ -527,7 +454,6 @@ module "drop_st_external_pe" {
 
   tags = local.base_tags
 }
-
 #   / Archive Storage
 resource "azurerm_storage_account" "archive_st" {
   name                = lower(replace("st-${local.full_suffix}-archive", "-", ""))
@@ -685,6 +611,94 @@ module "app_svc_st_external_pe" {
   tags = local.base_tags
 }
 
+#   / SFTP Storage
+resource "azurerm_storage_account" "sftp_st" {
+  name                = lower(replace("st-${local.full_suffix}-sftp", "-", ""))
+  resource_group_name = module.mainregion_poc_rg.name
+  location            = module.mainregion_poc_rg.location
+
+  account_kind             = "StorageV2"
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+
+  allow_nested_items_to_be_public = false    #Disable anonymous public read access to containers and blobs
+  enable_https_traffic_only       = true     #Require secure transfer (HTTPS) to the storage account for REST API Operations
+  min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
+  is_hns_enabled                  = true     #Enables Hierachical namespace, required for SFTP
+  sftp_enabled                    = true
+  public_network_access_enabled   = true
+
+  tags = local.base_tags
+  lifecycle { ignore_changes = [tags["BuiltOn"]] }
+}
+resource "azurerm_storage_account_network_rules" "sftp_st_nr" {
+  # Prevents locking the Storage Account before all resources are created
+  depends_on = [
+    azurerm_storage_account.sftp_st
+  ]
+
+  storage_account_id         = azurerm_storage_account.sftp_st.id
+  default_action             = "Deny"
+  ip_rules                   = [azurerm_public_ip.appsvc_int_natgw_pip.ip_address]
+  virtual_network_subnet_ids = []
+  bypass                     = ["None"]
+}
+resource "azurerm_storage_container" "sftp_cont" {
+  name                  = "sftp-user1"
+  storage_account_name  = azurerm_storage_account.sftp_st.name
+  container_access_type = "private"
+}
+module "sftp_st_local_pe" {
+  source     = "../terraform-modules/pe"
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
+
+  resource_id = azurerm_storage_account.sftp_st.id
+
+  resource_group_name  = module.mainregion_poc_rg.name
+  location             = module.mainregion_poc_rg.location
+  subnet_id            = azurerm_subnet.pe_subnet.id
+  subresource_names    = ["blob"]
+  is_manual_connection = false
+
+  privdns_rg_name = module.mainregion_poc_rg.name
+  cname_zone      = "blob.core.windows.net"
+  a_zone          = "privatelink.blob.core.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+module "sftp_st_external_pe" {
+  providers = { azurerm = azurerm.external }
+  source    = "../terraform-modules/pe"
+
+  resource_id = azurerm_storage_account.sftp_st.id
+
+  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+  location             = data.azurerm_virtual_network.external_vnet.location
+  subnet_id            = data.azurerm_subnet.external_subnet.id
+  subresource_names    = ["blob"]
+  is_manual_connection = false
+
+  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  cname_zone      = "blob.core.windows.net"
+  a_zone          = "privatelink.blob.core.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+#   / Create SFTP Username secret in KV
+resource "azurerm_key_vault_secret" "sftpuser_name_secret" {
+  name         = "sftp-user"
+  key_vault_id = azurerm_key_vault.kv.id
+  value        = "${azurerm_storage_account.sftp_st.name}.${var.sftp_user_name}"
+}
+#   / Create SFTP User password secret in KV
+resource "azurerm_key_vault_secret" "sftpuser_pwd_secret" {
+  name         = "sftp-password"
+  key_vault_id = azurerm_key_vault.kv.id
+  value        = var.sftp_user_pwd
+}
+
 #--------------------------------------------------------------
 #   Anomaly Detector AI
 #--------------------------------------------------------------
@@ -798,7 +812,7 @@ module "kv_external_pe" {
 
   tags = local.base_tags
 }
-#   / Create a secret
+#   / Create Authentication Service Principal secret
 resource "azurerm_key_vault_secret" "spn_pwd_secret" {
   name         = azuread_application.azsp_app.display_name
   key_vault_id = azurerm_key_vault.kv.id
@@ -1023,7 +1037,6 @@ resource "azurerm_role_assignment" "webapp_msi_kv_secret_user" {
   scope                = azurerm_key_vault.kv.id
 }
 
-
 #     ========  WIN WEB APP POST DEPLOYMENT STEPS  ========
 
 # 1. To grant Win Web App's MSI access to the SQL Database, execute this T-SQL, logged with an Azure AD user:
@@ -1040,6 +1053,7 @@ resource "azurerm_role_assignment" "webapp_msi_kv_secret_user" {
 
 # 4. Upload request-data.csv in the the "anomaly-data" container of the Archive Storage Account
 #    Source file is here: https://raw.githubusercontent.com/Azure/azure-sdk-for-python/main/sdk/anomalydetector/azure-ai-anomalydetector/samples/sample_data/request-data.csv
+
 
 #--------------------------------------------------------------
 #   Azure Function App
@@ -1116,6 +1130,15 @@ resource "azurerm_windows_function_app" "win_func_app" {
     # Functions Enable/Disable
     "AzureWebJobs.InputFilesProcessor.Disabled" = "1"
     "AzureWebJobs.WhatIsMyIP.Disabled"          = "1"
+    "AzureWebJobs.QueryDatabase.Disabled"       = "1"
+    "AzureWebJobs.SftpClient.Disabled"          = "0"
+
+    # SFTP access
+    # Secret pulled from Key vault directly. Ref: https://learn.microsoft.com/en-us/azure/app-service/app-service-key-vault-references?tabs=azure-cli
+    "SftpHost"    = "${azurerm_storage_account.sftp_st.name}.blob.core.windows.net"
+    "SftpUser"    = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.kv.name};SecretName=${azurerm_key_vault_secret.sftpuser_name_secret.name})"
+    "SftpPwd"     = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.kv.name};SecretName=${azurerm_key_vault_secret.sftpuser_pwd_secret.name})"
+    "SftpHomeDir" = "/${var.sftp_user_name}"
   }
 
   sticky_settings {
@@ -1173,37 +1196,31 @@ module "function_scm_external_privdns" {
 
   tags = local.base_tags
 }
-resource "azurerm_role_assignment" "function_role_to_app_svc_st_assignment" {
-  principal_id         = azurerm_windows_function_app.win_func_app.identity[0].principal_id
-  role_definition_name = "Storage Blob Data Contributor"
-  scope                = azurerm_storage_account.app_svc_st.id
-}
 
-#   / Role Assignment for Win Web App MSI on Drop Storage
+#   / Role Assignment for Function App MSI on Drop Storage
 resource "azurerm_role_assignment" "funcapp_msi_drop_st_blob_contributor" {
   principal_id         = azurerm_windows_function_app.win_func_app.identity[0].principal_id
   role_definition_name = "Storage Blob Data Contributor"
   scope                = azurerm_storage_account.drop_st.id
 }
-#   / Role Assignment for Win Web App MSI on Archive Storage
+#   / Role Assignment for Function App MSI on Archive Storage
 resource "azurerm_role_assignment" "funcapp_msi_archive_st_blob_contributor" {
   principal_id         = azurerm_windows_function_app.win_func_app.identity[0].principal_id
   role_definition_name = "Storage Blob Data Contributor"
   scope                = azurerm_storage_account.archive_st.id
 }
-#   / Role Assignment for Win Web App MSI on Web App + Function App Storage
-# resource "azurerm_role_assignment" "funcapp_msi_app_svc_st_blob_contributor" {
-#   principal_id         = azurerm_windows_function_app.win_func_app.identity[0].principal_id
-#   role_definition_name = "Storage Blob Data Contributor"
-#   scope                = azurerm_storage_account.app_svc_st.id
-# }
-#   / Role Assignment for Win Web App MSI on Key vault
+#  / Role Assignment for Function App MSI on Web App + Function App Storage
+resource "azurerm_role_assignment" "funcapp_msi_app_svc_st_blob_contributor" {
+  principal_id         = azurerm_windows_function_app.win_func_app.identity[0].principal_id
+  role_definition_name = "Storage Blob Data Contributor"
+  scope                = azurerm_storage_account.app_svc_st.id
+}
+#   / Role Assignment for Function App MSI on Key vault
 resource "azurerm_role_assignment" "funcapp_msi_kv_secret_user" {
   principal_id         = azurerm_windows_function_app.win_func_app.identity[0].principal_id
   role_definition_name = "Key Vault Secrets User"
   scope                = azurerm_key_vault.kv.id
 }
-
 
 #     ========  FUNCTION APP POST DEPLOYMENT STEPS  ========
 
@@ -1220,6 +1237,5 @@ resource "azurerm_role_assignment" "funcapp_msi_kv_secret_user" {
 # 3. Publish the Function from Visual Studio (or CD Pipeline)
 
 # 4. Upload the files that are in the 'data' directory in the "mft-drop" container of the Drop Storage Account
-
 
 #*/

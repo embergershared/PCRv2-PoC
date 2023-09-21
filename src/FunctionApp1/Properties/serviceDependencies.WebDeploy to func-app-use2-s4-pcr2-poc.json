@@ -1,0 +1,21 @@
+{
+  "dependencies": {
+    "appInsights2": {
+      "resourceId": "/subscriptions/[parameters('subscriptionId')]/resourceGroups/[parameters('resourceGroupName')]/providers/microsoft.insights/components/appins-use2-s4-pcr2-poc",
+      "type": "appInsights.azure",
+      "connectionId": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+      "dynamicId": null
+    },
+    "storage1": {
+      "resourceId": "/subscriptions/[parameters('subscriptionId')]/resourceGroups/[parameters('resourceGroupName')]/providers/Microsoft.Storage/storageAccounts/stuse2s4pcr2pocappsvcsup",
+      "type": "storage.azure",
+      "connectionId": "AzureWebJobsStorage"
+    },
+    "storage2": {
+      "ignored": "true",
+      "type": "storage",
+      "connectionId": "DropST",
+      "dynamicId": null
+    }
+  }
+}

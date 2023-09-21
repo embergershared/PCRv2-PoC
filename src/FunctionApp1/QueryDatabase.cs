@@ -39,8 +39,6 @@ namespace FunctionApp1
                 }
             }
 
-
-
             log.LogInformation($"C# Timer triggered function \"QueryDatabase\" FINISHED at: {DateTime.Now}");
         }
 
