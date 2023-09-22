@@ -14,3 +14,6 @@ variable "external_snet_pe_id" {}
 # SFTP Connection
 variable "sftp_user_name" {}
 variable "sftp_user_pwd" {}
+
+# External facing Web App URL
+variable "external_url" {}

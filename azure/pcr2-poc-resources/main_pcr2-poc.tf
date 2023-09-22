@@ -94,12 +94,15 @@ data "azurerm_subnet" "external_subnet" {
 #   Core Resources: Values for Naming and Resource Group
 #--------------------------------------------------------------
 locals {
-  base_name         = "pcr2"
-  add_name          = "poc"
-  full_suffix       = "${var.main_region_code}-${var.subsc_nickname}-${local.base_name}-${local.add_name}"
-  vnet_space        = "192.168.20.0/24"
-  private_dns_zones = toset(["blob.core.windows.net", "privatelink.blob.core.windows.net", "file.core.windows.net", "privatelink.file.core.windows.net", "vault.azure.net", "vaultcore.azure.net", "database.windows.net", "privatelink.database.windows.net", "cognitiveservices.azure.com"]) # "azurewebsites.net", "privatelink.azurewebsites.net",
-  # external_snet_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  base_name                   = "pcr2"
+  add_name                    = "poc"
+  full_suffix                 = "${var.main_region_code}-${var.subsc_nickname}-${local.base_name}-${local.add_name}"
+  vnet_space                  = "192.168.20.0/24"
+  appgw_vnet_space            = "10.0.0.0/16"
+  private_dns_zones           = toset(["blob.core.windows.net", "privatelink.blob.core.windows.net", "file.core.windows.net", "privatelink.file.core.windows.net", "vault.azure.net", "vaultcore.azure.net", "database.windows.net", "privatelink.database.windows.net", "cognitiveservices.azure.com"]) # "azurewebsites.net", "privatelink.azurewebsites.net",
+  external_url_prefix         = split(".", var.external_url)[0]
+  external_url_prefix_trimmed = replace(local.external_url_prefix, "-", "")
+  external_url_domain         = replace(var.external_url, "${local.external_url_prefix}.", "")
 }
 #   / Main region Resource Group
 module "mainregion_poc_rg" {
@@ -130,6 +133,7 @@ resource "azurerm_virtual_network" "poc_vnet" {
   lifecycle { ignore_changes = [tags["BuiltOn"]] }
 }
 #   / Subnets
+#     / For Private Endpoints
 resource "azurerm_subnet" "pe_subnet" {
   name                                      = "snet-poc-pe"
   resource_group_name                       = module.mainregion_poc_rg.name
@@ -139,6 +143,7 @@ resource "azurerm_subnet" "pe_subnet" {
 }
 #   Note: a delegated subnet is required for App Svc VNet integration.
 #         It prevents Private Endpoints on this subnet (PrivateEndpointCreationNotAllowedAsSubnetIsDelegated)
+#     / For App Service VNet integration
 resource "azurerm_subnet" "appsvc_int_subnet" {
   name                 = "snet-poc-appsvc-integration"
   resource_group_name  = module.mainregion_poc_rg.name
@@ -262,6 +267,264 @@ resource "azurerm_application_insights" "poc_appins" {
 }
 
 #--------------------------------------------------------------
+#   Application Gateway
+#--------------------------------------------------------------
+#   / VNet
+resource "azurerm_virtual_network" "appgw_vnet" {
+  name                = lower("vnet-for-appgw-${local.full_suffix}")
+  resource_group_name = module.mainregion_poc_rg.name
+  location            = module.mainregion_poc_rg.location
+  address_space       = [local.appgw_vnet_space, "192.168.21.0/24"]
+
+  tags = local.base_tags
+  lifecycle { ignore_changes = [tags["BuiltOn"]] }
+}
+# / Subnet for App Gateway
+resource "azurerm_subnet" "appgw_subnet" {
+  name                                      = "default"
+  resource_group_name                       = module.mainregion_poc_rg.name
+  virtual_network_name                      = azurerm_virtual_network.appgw_vnet.name
+  private_endpoint_network_policies_enabled = false
+  address_prefixes                          = ["10.0.0.0/24"] # [replace(local.vnet_space, "0/24", "64/27")]
+}
+
+# / Subnet for App Gateway PEs
+resource "azurerm_subnet" "appgw_pe_subnet" {
+  name                                      = "snet-poc-appgw"
+  resource_group_name                       = module.mainregion_poc_rg.name
+  virtual_network_name                      = azurerm_virtual_network.appgw_vnet.name
+  private_endpoint_network_policies_enabled = true
+  address_prefixes                          = ["192.168.21.0/27"] # [replace(local.vnet_space, "0/24", "64/27")]
+}
+# / Public IP for App Gateway
+resource "azurerm_public_ip" "appgw_pip" {
+  name                = lower("pip-for-appgw-${local.full_suffix}")
+  location            = module.mainregion_poc_rg.location
+  resource_group_name = module.mainregion_poc_rg.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  zones               = []
+}
+# / Application Gateway
+locals {
+  backend_address_pool_name      = "be-app-pool"
+  frontend_port_name             = "fe-port"
+  frontend_ip_configuration_name = "fe-ip"
+  http_setting_name              = "be-htst"
+  listener_name                  = "fe-lstn"
+  request_routing_rule_name      = "rq-rt-rule"
+  redirect_configuration_name    = "rdr-cfg"
+}
+# User Assigned Identity to be used by the App Gateway
+resource "azurerm_user_assigned_identity" "appgw_uai" {
+  name                = lower("msi-for-appgw-${local.full_suffix}")
+  location            = module.mainregion_poc_rg.location
+  resource_group_name = module.mainregion_poc_rg.name
+}
+# / To access Key Vault with this permissions (to get the SSL/TLS certificate)
+resource "azurerm_role_assignment" "appgw_uai_role_assignment_on_kv" {
+  principal_id         = azurerm_user_assigned_identity.appgw_uai.principal_id
+  role_definition_name = "Key Vault Administrator"
+  scope                = azurerm_key_vault.kv.id
+}
+
+resource "azurerm_application_gateway" "appgw" {
+  name                = lower("appgw-${local.full_suffix}")
+  location            = module.mainregion_poc_rg.location
+  resource_group_name = module.mainregion_poc_rg.name
+
+  autoscale_configuration {
+    max_capacity = 10
+    min_capacity = 1
+  }
+
+  backend_address_pool {
+    fqdns = []
+    ip_addresses = [
+      "192.168.21.4",
+    ]
+    name = "webapp-win-pe-backend"
+  }
+
+  backend_http_settings {
+    affinity_cookie_name                = "ApplicationGatewayAffinity"
+    cookie_based_affinity               = "Disabled"
+    host_name                           = "${local.external_url_prefix}.${local.external_url_domain}"
+    name                                = "${local.external_url_prefix_trimmed}-https-backend-settings"
+    pick_host_name_from_backend_address = false
+    port                                = 443
+    probe_name                          = "${local.external_url_prefix_trimmed}-https-health-probe"
+    protocol                            = "Https"
+    request_timeout                     = 20
+    trusted_root_certificate_names      = []
+  }
+
+  frontend_ip_configuration {
+    name                 = "appGwPublicFrontendIpIPv4"
+    public_ip_address_id = azurerm_public_ip.appgw_pip.id
+  }
+  frontend_ip_configuration {
+    name                            = "appGwPrivateFrontendIpIPv4"
+    private_ip_address_allocation   = "Static"
+    private_link_configuration_name = "appgw-privatelink-private-frontend-ip-config"
+    subnet_id                       = azurerm_subnet.appgw_subnet.id
+  }
+
+  frontend_port {
+    name = "port_443"
+    port = 443
+  }
+  frontend_port {
+    name = "port_80"
+    port = 80
+  }
+
+  gateway_ip_configuration {
+    name      = "appGatewayIpConfig"
+    subnet_id = azurerm_subnet.appgw_subnet.id
+  }
+
+  http_listener {
+    frontend_ip_configuration_name = "appGwPrivateFrontendIpIPv4"
+    frontend_port_name             = "port_443"
+    host_name                      = "${local.external_url_prefix}.${local.external_url_domain}"
+    host_names                     = []
+    name                           = "${local.external_url_prefix_trimmed}-private-https-listener"
+    protocol                       = "Https"
+    require_sni                    = true
+    ssl_certificate_name           = local.external_url_prefix
+  }
+  http_listener {
+    frontend_ip_configuration_name = "appGwPublicFrontendIpIPv4"
+    frontend_port_name             = "port_443"
+    host_name                      = "${local.external_url_prefix}.${local.external_url_domain}"
+    host_names                     = []
+    name                           = "${local.external_url_prefix_trimmed}-https-listener"
+    protocol                       = "Https"
+    require_sni                    = true
+    ssl_certificate_name           = local.external_url_prefix
+  }
+
+  identity {
+    identity_ids = [
+      azurerm_user_assigned_identity.appgw_uai.id,
+    ]
+    type = "UserAssigned"
+  }
+
+  private_link_configuration {
+    # Reference: https://learn.microsoft.com/en-us/azure/application-gateway/private-link-configure?tabs=portal
+    name = "appgw-privatelink-private-frontend-ip-config"
+
+    ip_configuration {
+      name                          = "privateLinkIpConfig1"
+      primary                       = true
+      private_ip_address_allocation = "Dynamic"
+      subnet_id                     = azurerm_subnet.appgw_pe_subnet.id
+    }
+  }
+
+  probe {
+    host                                      = "${local.external_url_prefix}.${local.external_url_domain}"
+    interval                                  = 30
+    minimum_servers                           = 0
+    name                                      = "${local.external_url_prefix_trimmed}-https-health-probe"
+    path                                      = "/"
+    pick_host_name_from_backend_http_settings = false
+    port                                      = 443
+    protocol                                  = "Https"
+    timeout                                   = 30
+    unhealthy_threshold                       = 3
+    match {
+      status_code = [
+        "200-403",
+      ]
+    }
+  }
+
+  request_routing_rule {
+    backend_address_pool_name  = "webapp-win-pe-backend"
+    backend_http_settings_name = "${local.external_url_prefix_trimmed}-https-backend-settings"
+    http_listener_name         = "${local.external_url_prefix_trimmed}-https-listener"
+    name                       = "${local.external_url_prefix_trimmed}-https-routing-rule"
+    priority                   = 300
+    rule_type                  = "Basic"
+  }
+  request_routing_rule {
+    backend_address_pool_name  = "webapp-win-pe-backend"
+    backend_http_settings_name = "${local.external_url_prefix_trimmed}-https-backend-settings"
+    http_listener_name         = "${local.external_url_prefix_trimmed}-private-https-listener"
+    name                       = "${local.external_url_prefix_trimmed}-private-https-routing-rule"
+    priority                   = 200
+    rule_type                  = "Basic"
+  }
+
+  sku {
+    name     = "Standard_v2"
+    tier     = "Standard_v2"
+    capacity = 0
+  }
+
+  ssl_certificate {
+    name                = local.external_url_prefix
+    key_vault_secret_id = "https://kv-use2-s4-${local.external_url_prefix}.vault.azure.net:443/secrets/${local.external_url_prefix}/"
+    # IMPORTANT: The Key vault is RBAC enabled, so the certificate must be imported in App Gateway through scipt (doesn't work with portal)
+    # As per: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs?WT.mc_id=Portal-Microsoft_Azure_HybridNetworking#key-vault-azure-role-based-access-control-permission-model
+  }
+}
+
+#   / Create Private DNS Zone and Endpoint for internal users from Hub
+resource "azurerm_private_dns_zone" "ebdemos" {
+  provider = azurerm.external
+
+  name                = local.external_url_domain
+  resource_group_name = data.azurerm_virtual_network.external_vnet.resource_group_name
+  tags                = local.base_tags
+}
+resource "azurerm_private_dns_zone_virtual_network_link" "ebdemos_link" {
+  provider = azurerm.external
+
+  depends_on = [azurerm_private_dns_zone.ebdemos]
+
+  name                  = "${azurerm_private_dns_zone.ebdemos.name}-to-${replace(data.azurerm_virtual_network.external_vnet.name, "-", "_")}-link"
+  resource_group_name   = data.azurerm_virtual_network.external_vnet.resource_group_name
+  private_dns_zone_name = azurerm_private_dns_zone.ebdemos.name
+  virtual_network_id    = data.azurerm_virtual_network.external_vnet.id
+  registration_enabled  = false
+  tags                  = local.base_tags
+}
+module "appgw_external_pe" {
+  providers = { azurerm = azurerm.external }
+  source    = "../terraform-modules/pe"
+
+  resource_id = azurerm_application_gateway.appgw.id
+
+  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+  location             = data.azurerm_virtual_network.external_vnet.location
+  subnet_id            = data.azurerm_subnet.external_subnet.id
+  subresource_names    = [azurerm_application_gateway.appgw.frontend_ip_configuration[1].name]
+  is_manual_connection = false
+
+  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  cname_zone      = null
+  a_zone          = null
+  ttl             = 10
+
+  tags = local.base_tags
+}
+resource "azurerm_private_dns_a_record" "external_url_a_record" {
+  provider = azurerm.external
+
+  name                = local.external_url_prefix
+  zone_name           = azurerm_private_dns_zone.ebdemos.name
+  resource_group_name = azurerm_private_dns_zone.ebdemos.resource_group_name
+  ttl                 = 10
+  records             = ["${module.appgw_external_pe.private_ip_address}"]
+  tags                = local.base_tags
+}
+
+
+#--------------------------------------------------------------
 #   Application Service Authentication App Registration
 #--------------------------------------------------------------
 #   / Application Registration for Azure AD authentication in the Win Web APp
@@ -297,6 +560,7 @@ resource "azuread_application" "azsp_app" {
     redirect_uris = [
       "http://localhost:5081/signin-oidc",
       "https://webapp-win-${local.full_suffix}.azurewebsites.net/.auth/login/aad/callback",
+      "https://${local.external_url_prefix}.${local.external_url_domain}/.auth/login/aad/callback",
     ]
 
     implicit_grant {
@@ -853,6 +1117,13 @@ resource "azurerm_windows_web_app" "poc_app_svc" {
       current_stack  = "dotnetcore"
       dotnet_version = "v6.0"
       # dotnet_core_version = "v6.0"
+    }
+    ip_restriction {
+      action     = "Allow"
+      headers    = []
+      ip_address = "X.X.X.X/Y"
+      name       = "MyIP"
+      priority   = 200
     }
   }
   connection_string {

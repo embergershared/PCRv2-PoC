@@ -6,10 +6,11 @@ locals {
 
 #     / Create Private Endpoint
 resource "azurerm_private_endpoint" "this" {
-  name                = "pe-${replace(local.target_resource_name, "-", "")}-for-${replace(local.vnet_name, "-", "")}"
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  subnet_id           = var.subnet_id
+  name                          = "pe-to-${replace(local.target_resource_name, "-", "")}"
+  resource_group_name           = var.resource_group_name
+  location                      = var.location
+  subnet_id                     = var.subnet_id
+  custom_network_interface_name = "nic-pe-to-${replace(local.target_resource_name, "-", "")}"
 
   private_service_connection {
     name                           = "${local.vnet_name}_${local.subnet_name}_connection"
