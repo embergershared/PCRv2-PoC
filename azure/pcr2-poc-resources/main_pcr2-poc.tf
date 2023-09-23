@@ -245,12 +245,13 @@ resource "azurerm_key_vault" "kv" {
 
   # NOTE: AzureServices + subnet Id + Public access required for KV Private Endpoint use by Application Gateway
   # Ref: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs#verify-firewall-permissions-to-key-vault
-  public_network_access_enabled = true
+  # But it doesn't work, (App Gateway issue), removing it
+  public_network_access_enabled = false
   network_acls {
-    bypass                     = "AzureServices" # "None" | "AzureServices"
+    bypass                     = "None" # "None" | "AzureServices"
     default_action             = "Deny"
     ip_rules                   = [] # [module.publicip.public_ip]
-    virtual_network_subnet_ids = [azurerm_subnet.appgw_subnet.id]
+    virtual_network_subnet_ids = [] # [azurerm_subnet.appgw_subnet.id]
   }
 
   tags = local.base_tags
@@ -356,12 +357,11 @@ resource "azurerm_subnet" "appgw_privlink_subnet" {
 }
 #   / Private DNS Zones link to App Gateway VNet
 #     Link the required Private DNS Zones to App Gateway VNet to enable DNS resolution for App Gateway
-#       - Key vault to get the TLS certificates
 #       - Web App to redirect to App Services Private Endpoints
 resource "azurerm_private_dns_zone_virtual_network_link" "appgw_link" {
   depends_on = [azurerm_private_dns_zone.this]
 
-  for_each = toset(["vault.azure.net", "vaultcore.azure.net", "azurewebsites.net", "privatelink.azurewebsites.net"])
+  for_each = toset(["azurewebsites.net", "privatelink.azurewebsites.net"])
 
   name                  = "Link_to_${azurerm_virtual_network.appgw_vnet.name}"
   resource_group_name   = module.poc_rg.name
@@ -402,28 +402,28 @@ resource "azurerm_virtual_network_peering" "pcr2_to_appgw_vnet" {
   allow_gateway_transit        = false
   use_remote_gateways          = false
 }
-#   / Locals for naming conventions
-locals {
-  backend_address_pool_name      = "be-app-pool"
-  frontend_port_name             = "fe-port"
-  frontend_ip_configuration_name = "fe-ip"
-  http_setting_name              = "be-htst"
-  listener_name                  = "fe-lstn"
-  request_routing_rule_name      = "rq-rt-rule"
-  redirect_configuration_name    = "rdr-cfg"
-}
-#   / User Assigned Identity to be used by the App Gateway
-resource "azurerm_user_assigned_identity" "appgw_uai" {
-  name                = lower("msi-appgw-waf-${local.full_suffix}")
-  location            = module.poc_rg.location
-  resource_group_name = module.poc_rg.name
-}
-#   / To access Key Vault with this permissions (to get the SSL/TLS certificate)
-resource "azurerm_role_assignment" "appgw_uai_role_assignment_on_kv" {
-  principal_id         = azurerm_user_assigned_identity.appgw_uai.principal_id
-  role_definition_name = "Key Vault Administrator"
-  scope                = azurerm_key_vault.kv.id
-}
+# #   / Locals for naming conventions
+# locals {
+#   backend_address_pool_name      = "be-app-pool"
+#   frontend_port_name             = "fe-port"
+#   frontend_ip_configuration_name = "fe-ip"
+#   http_setting_name              = "be-htst"
+#   listener_name                  = "fe-lstn"
+#   request_routing_rule_name      = "rq-rt-rule"
+#   redirect_configuration_name    = "rdr-cfg"
+# }
+# #   / User Assigned Identity to be used by the App Gateway
+# resource "azurerm_user_assigned_identity" "appgw_uai" {
+#   name                = lower("msi-appgw-waf-${local.full_suffix}")
+#   location            = module.poc_rg.location
+#   resource_group_name = module.poc_rg.name
+# }
+# #   / To access Key Vault with this permissions (to get the SSL/TLS certificate)
+# resource "azurerm_role_assignment" "appgw_uai_role_assignment_on_kv" {
+#   principal_id         = azurerm_user_assigned_identity.appgw_uai.principal_id
+#   role_definition_name = "Key Vault Administrator"
+#   scope                = azurerm_key_vault.kv.id
+# }
 #   / TLS certificate used by App Gateway & App Service
 #     Following this setup: https://learn.microsoft.com/en-us/azure/application-gateway/configure-web-app?tabs=customdomain%2Cazure-portal
 resource "azurerm_key_vault_certificate" "tls_cert" {
@@ -474,7 +474,6 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
   backend_address_pool {
     name = "backend-pool-app-svc"
     fqdns = [
-      # "webapp-win-use2-s4-pcr2-poc.azurewebsites.net",
       azurerm_windows_web_app.poc_app_svc.default_hostname
     ]
     ip_addresses = []
@@ -494,14 +493,14 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
 
   frontend_ip_configuration {
     name                 = "appGwPublicFrontendIpIPv4"
-    public_ip_address_id = azurerm_public_ip.appgw_pip.id # "/subscriptions/34144584-4817-47a0-a912-bd00bae76495/resourceGroups/rg-use2-s4-pcr2-poc/providers/Microsoft.Network/publicIPAddresses/pip-for-appgw-waf-use2-s4-pcr2-poc"
+    public_ip_address_id = azurerm_public_ip.appgw_pip.id
   }
   frontend_ip_configuration {
     name                            = "appGwPrivateFrontendIpIPv4"
     private_ip_address_allocation   = "Static"
     private_ip_address              = "192.168.25.10"
     private_link_configuration_name = "private-link-config-private"
-    subnet_id                       = azurerm_subnet.appgw_subnet.id # "/subscriptions/34144584-4817-47a0-a912-bd00bae76495/resourceGroups/rg-use2-s4-pcr2-poc/providers/Microsoft.Network/virtualNetworks/vnet-for-appgw-waf-use2-s4-pcr2-poc/subnets/snet-appgw"
+    subnet_id                       = azurerm_subnet.appgw_subnet.id
   }
 
   frontend_port {
@@ -520,7 +519,7 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
     host_names                     = []
     protocol                       = "Https"
     require_sni                    = false
-    ssl_certificate_name           = "pcr2-poc-tls-cert-kv"
+    ssl_certificate_name           = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
   }
 
   private_link_configuration {
@@ -557,9 +556,8 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
     backend_address_pool_name  = "backend-pool-app-svc"
     backend_http_settings_name = "backend-settings-https"
     http_listener_name         = "listener-https-private"
-    # id                         = "/subscriptions/34144584-4817-47a0-a912-bd00bae76495/resourceGroups/rg-use2-s4-pcr2-poc/providers/Microsoft.Network/applicationGateways/appgw-waf-use2-s4-pcr2-poc/requestRoutingRules/routing-rule-https-ebdemosnet"
-    priority  = 500
-    rule_type = "Basic"
+    priority                   = 500
+    rule_type                  = "Basic"
   }
 
   gateway_ip_configuration {
@@ -567,12 +565,12 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
     subnet_id = azurerm_subnet.appgw_subnet.id
   }
 
-  identity {
-    identity_ids = [
-      azurerm_user_assigned_identity.appgw_uai.id,
-    ]
-    type = "UserAssigned"
-  }
+  # identity {
+  #   identity_ids = [
+  #     azurerm_user_assigned_identity.appgw_uai.id,
+  #   ]
+  #   type = "UserAssigned"
+  # }
 
   sku {
     name     = "WAF_v2"
@@ -580,11 +578,20 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
     capacity = 0
   }
 
+  # ssl_certificate {
+  #   # After days of testing, Key vault integration with a Private Endpoint + RBAC only Key vault doesn't work
+  #   # Keeping this code for future refence, when App Gateway will get working feature
+  #   name                = azurerm_key_vault_certificate.tls_cert.name
+  #   key_vault_secret_id = "https://kv-use2-s4-${local.full_suffix}.vault.azure.net:443/secrets/${azurerm_key_vault_certificate.tls_cert.name}/"
+  #   # IMPORTANT: The Key vault is RBAC enabled, so the certificate must be imported in App Gateway through scipt (doesn't work with portal)
+  #   # As per: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs?WT.mc_id=Portal-Microsoft_Azure_HybridNetworking#key-vault-azure-role-based-access-control-permission-model
+  # }
+
   ssl_certificate {
-    name                = azurerm_key_vault_certificate.tls_cert.name
-    key_vault_secret_id = "https://kv-use2-s4-${local.full_suffix}.vault.azure.net:443/secrets/${azurerm_key_vault_certificate.tls_cert.name}/"
-    # IMPORTANT: The Key vault is RBAC enabled, so the certificate must be imported in App Gateway through scipt (doesn't work with portal)
-    # As per: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs?WT.mc_id=Portal-Microsoft_Azure_HybridNetworking#key-vault-azure-role-based-access-control-permission-model
+    name     = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
+    data     = filebase64(var.tls_cert_path)
+    password = var.tls_cert_pwd
+
   }
 }
 #   / Create Private DNS Zone and Endpoint for internal users from Hub
