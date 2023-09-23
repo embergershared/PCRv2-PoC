@@ -55,12 +55,14 @@ app.UseAuthorization();
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-  app.UseExceptionHandler("/Error");
+    app.UseExceptionHandler("/Error");
+    app.MapControllers().AllowAnonymous();
 }
 else
 {
     app.UseDeveloperExceptionPage();
     app.UseMigrationsEndPoint();
+    app.MapControllers();
 }
 
 // Create database if not existing
@@ -70,8 +72,8 @@ using (var scope = app.Services.CreateScope())
     var services = scope.ServiceProvider;
 
     var context = services.GetRequiredService<WebApp1EfDbContext>();
-    context.Database.EnsureCreated();
-    DbInitializer.Initialize(context);
+    //context.Database.EnsureCreated();
+    //DbInitializer.Initialize(context);
 }
 
 app.UseHttpsRedirection();

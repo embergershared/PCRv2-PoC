@@ -10,12 +10,6 @@
       "resourceId": "/subscriptions/[parameters('subscriptionId')]/resourceGroups/[parameters('resourceGroupName')]/providers/Microsoft.Storage/storageAccounts/stuse2s4pcr2pocappsvcsup",
       "type": "storage.azure",
       "connectionId": "AzureWebJobsStorage"
-    },
-    "storage2": {
-      "ignored": "true",
-      "type": "storage",
-      "connectionId": "DropST",
-      "dynamicId": null
     }
   }
 }
