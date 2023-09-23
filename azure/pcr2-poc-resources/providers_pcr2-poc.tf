@@ -36,7 +36,7 @@ provider "azurerm" {
   alias = "external"
 
   tenant_id       = var.tenant_id
-  subscription_id = var.external_subscription_id
+  subscription_id = local.external_subscription_id
   client_id       = var.client_id
   client_secret   = var.client_secret
 

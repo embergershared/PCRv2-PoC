@@ -32,48 +32,6 @@
 
 
 #--------------------------------------------------------------
-#   Plan's Locals and specific resources
-#--------------------------------------------------------------
-data "azurerm_client_config" "current" {}
-resource "time_static" "this" {}
-locals {
-  # Plan Tag value
-  tf_plan = "/azure/pcr2-poc-resources/main_pcr2-poc.tf"
-
-  # Dates formatted
-  UTC_to_TZ   = "-4h" # Careful to factor DST
-  TZ_suffix   = "EST"
-  now         = timestamp() # in UTC
-  created_now = time_static.this.rfc3339
-
-  # UTC based
-  nowUTC               = formatdate("YYYY-MM-DD hh:mm ZZZ", local.now)                                  # 2020-06-16 14:44 UTC
-  nowUTCFormatted      = "${formatdate("YYYY-MM-DD", local.now)}T${formatdate("hh:mm:ss", local.now)}Z" # "2029-01-01T01:01:01Z"
-  in3yearsUTC          = timeadd(local.now, "26280h")
-  in3yearsUTCFormatted = "${formatdate("YYYY-MM-DD", local.in3yearsUTC)}T${formatdate("hh:mm:ss", local.in3yearsUTC)}Z" # "2029-01-01T01:01:01Z"
-
-  # Timezone based
-  TZtime         = timeadd(local.now, local.UTC_to_TZ)
-  created_TZtime = timeadd(local.created_now, local.UTC_to_TZ)
-  nowTZ          = "${formatdate("YYYY-MM-DD hh:mm", local.TZtime)} ${local.TZ_suffix}"              # 2020-06-16 14:44 EST
-  created_nowTZ  = "${formatdate("YYYY-MM-DD hh:mm", local.created_TZtime)} ${local.TZ_suffix}"      # 2020-06-16 14:44 EST
-  nowTZFormatted = "${formatdate("YYYY-MM-DD", local.TZtime)}T${formatdate("hh:mm:ss", local.now)}Z" # "2029-01-01T01:01:01Z"
-  in3yearsTZ     = timeadd(local.TZtime, "26280h")
-
-  # Tags values
-  tf_workspace = terraform.workspace == "default" ? "default" : "${terraform.workspace}"
-  fixed_tags = tomap({
-    "Created_with" = "Terraform v1.5.6 on windows_amd64",
-    "Created_on"   = "${local.created_nowTZ}",
-    "Initiated_by" = "Emmanuel",
-    "Tf_Plan"      = "${local.tf_plan}",
-  })
-  base_tags = merge(
-    local.fixed_tags,
-  )
-}
-
-#--------------------------------------------------------------
 #   External Subscription Subnet for External PEs
 #--------------------------------------------------------------
 data "azurerm_virtual_network" "external_vnet" {
@@ -97,15 +55,16 @@ locals {
   base_name                   = "pcr2"
   add_name                    = "poc"
   full_suffix                 = "${var.main_region_code}-${var.subsc_nickname}-${local.base_name}-${local.add_name}"
-  vnet_space                  = "192.168.20.0/24"
-  appgw_vnet_space            = "10.0.0.0/16"
-  private_dns_zones           = toset(["blob.core.windows.net", "privatelink.blob.core.windows.net", "file.core.windows.net", "privatelink.file.core.windows.net", "vault.azure.net", "vaultcore.azure.net", "database.windows.net", "privatelink.database.windows.net", "cognitiveservices.azure.com"]) # "azurewebsites.net", "privatelink.azurewebsites.net",
+  pcr2_vnet_space             = "192.168.23.0/24"
+  appgw_vnet_space            = "192.168.25.0/24"
+  private_dns_zones           = toset(["blob.core.windows.net", "privatelink.blob.core.windows.net", "file.core.windows.net", "privatelink.file.core.windows.net", "vault.azure.net", "vaultcore.azure.net", "database.windows.net", "privatelink.database.windows.net", "cognitiveservices.azure.com", "azurewebsites.net", "privatelink.azurewebsites.net"])
+  external_subscription_id    = split("/", var.external_snet_pe_id)[2]
   external_url_prefix         = split(".", var.external_url)[0]
   external_url_prefix_trimmed = replace(local.external_url_prefix, "-", "")
   external_url_domain         = replace(var.external_url, "${local.external_url_prefix}.", "")
 }
 #   / Main region Resource Group
-module "mainregion_poc_rg" {
+module "poc_rg" {
   # Terraform Cloud/Enterprise use
   source  = "app.terraform.io/embergertf/resourcegroup/azurerm"
   version = "~>1.3.3"
@@ -122,12 +81,12 @@ module "mainregion_poc_rg" {
 #--------------------------------------------------------------
 #   Networking and Private DNS
 #--------------------------------------------------------------
-#   / VNet
-resource "azurerm_virtual_network" "poc_vnet" {
+#   / PCR2 VNet
+resource "azurerm_virtual_network" "pcr2_vnet" {
   name                = lower("vnet-${local.full_suffix}")
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-  address_space       = [local.vnet_space]
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+  address_space       = [local.pcr2_vnet_space]
 
   tags = local.base_tags
   lifecycle { ignore_changes = [tags["BuiltOn"]] }
@@ -135,25 +94,24 @@ resource "azurerm_virtual_network" "poc_vnet" {
 #   / Subnets
 #     / For Private Endpoints
 resource "azurerm_subnet" "pe_subnet" {
-  name                                      = "snet-poc-pe"
-  resource_group_name                       = module.mainregion_poc_rg.name
-  virtual_network_name                      = azurerm_virtual_network.poc_vnet.name
-  private_endpoint_network_policies_enabled = true
-  address_prefixes                          = [replace(local.vnet_space, "0/24", "0/27")]
+  name                                          = "snet-pe"
+  resource_group_name                           = module.poc_rg.name
+  virtual_network_name                          = azurerm_virtual_network.pcr2_vnet.name
+  private_endpoint_network_policies_enabled     = true
+  private_link_service_network_policies_enabled = false
+  address_prefixes                              = [replace(local.pcr2_vnet_space, "0/24", "0/26")]
 }
-#   Note: a delegated subnet is required for App Svc VNet integration.
-#         It prevents Private Endpoints on this subnet (PrivateEndpointCreationNotAllowedAsSubnetIsDelegated)
 #     / For App Service VNet integration
 resource "azurerm_subnet" "appsvc_int_subnet" {
-  name                 = "snet-poc-appsvc-integration"
-  resource_group_name  = module.mainregion_poc_rg.name
-  virtual_network_name = azurerm_virtual_network.poc_vnet.name
-  address_prefixes     = [replace(local.vnet_space, "0/24", "32/27")]
+  # Recommeded: /26 (64 addresses) (https://learn.microsoft.com/en-us/azure/app-service/overview-vnet-integration#subnet-requirements)
 
-  service_endpoints = [
-    "Microsoft.Storage",
-    "Microsoft.CognitiveServices",
-  ]
+  # Note: App Service VNet integration requires a delegated subnet.
+  # No Private Endpoints can be created on this subnet (PrivateEndpointCreationNotAllowedAsSubnetIsDelegated)
+
+  name                 = "snet-appsvc-vnet-int"
+  resource_group_name  = module.poc_rg.name
+  virtual_network_name = azurerm_virtual_network.pcr2_vnet.name
+  address_prefixes     = [replace(local.pcr2_vnet_space, "0/24", "64/26")]
 
   delegation {
     name = "Microsoft.Web.serverFarms"
@@ -168,34 +126,36 @@ resource "azurerm_private_dns_zone" "this" {
   for_each = local.private_dns_zones
 
   name                = each.value
-  resource_group_name = module.mainregion_poc_rg.name
-  tags                = module.mainregion_poc_rg.tags
+  resource_group_name = module.poc_rg.name
+  tags                = module.poc_rg.tags
 }
 resource "azurerm_private_dns_zone_virtual_network_link" "this" {
   depends_on = [azurerm_private_dns_zone.this]
 
   for_each = local.private_dns_zones
 
-  name                  = "${each.value}-to-${replace(azurerm_virtual_network.poc_vnet.name, "-", "_")}-link"
-  resource_group_name   = module.mainregion_poc_rg.name
+  # name                  = "${each.value}-to-${replace(azurerm_virtual_network.pcr2_vnet.name, "-", "_")}-link"
+  name = "Link_to_${azurerm_virtual_network.pcr2_vnet.name}"
+
+  resource_group_name   = module.poc_rg.name
   private_dns_zone_name = each.value
-  virtual_network_id    = azurerm_virtual_network.poc_vnet.id
+  virtual_network_id    = azurerm_virtual_network.pcr2_vnet.id
   registration_enabled  = false
-  tags                  = module.mainregion_poc_rg.tags
+  tags                  = module.poc_rg.tags
 }
 #   / NAT Gateway
 resource "azurerm_public_ip" "appsvc_int_natgw_pip" {
   name                = lower("pip-for-natgw-${local.full_suffix}")
-  location            = module.mainregion_poc_rg.location
-  resource_group_name = module.mainregion_poc_rg.name
+  location            = module.poc_rg.location
+  resource_group_name = module.poc_rg.name
   allocation_method   = "Static"
   sku                 = "Standard"
   zones               = []
 }
 resource "azurerm_nat_gateway" "appsvc_int_natgw" {
   name                    = lower("natgw-${local.full_suffix}")
-  location                = module.mainregion_poc_rg.location
-  resource_group_name     = module.mainregion_poc_rg.name
+  location                = module.poc_rg.location
+  resource_group_name     = module.poc_rg.name
   sku_name                = "Standard"
   idle_timeout_in_minutes = 10
   zones                   = []
@@ -212,8 +172,8 @@ resource "azurerm_subnet_nat_gateway_association" "appsvc_int_natgw_snet_associa
 resource "azurerm_network_security_group" "vnet_int_subnet_nsg" {
   name = lower("nsg-${azurerm_subnet.appsvc_int_subnet.name}")
 
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
 
   tags = local.base_tags
   lifecycle { ignore_changes = [tags["BuiltOn"]] }
@@ -226,8 +186,8 @@ resource "azurerm_subnet_network_security_group_association" "vnet_int_subnet_to
 resource "azurerm_network_security_group" "pe_subnet_nsg" {
   name = lower("nsg-${azurerm_subnet.pe_subnet.name}")
 
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
 
   tags = local.base_tags
   lifecycle { ignore_changes = [tags["BuiltOn"]] }
@@ -236,7 +196,7 @@ resource "azurerm_subnet_network_security_group_association" "pe_subnet_to_nsg_a
   subnet_id                 = azurerm_subnet.pe_subnet.id
   network_security_group_id = azurerm_network_security_group.pe_subnet_nsg.id
 }
-
+#*/
 
 #--------------------------------------------------------------
 #   Application Service Telemetry
@@ -244,8 +204,8 @@ resource "azurerm_subnet_network_security_group_association" "pe_subnet_to_nsg_a
 #   / Main region App Service telemetry
 resource "azurerm_log_analytics_workspace" "poc_law" {
   name                       = lower("law-${local.full_suffix}")
-  resource_group_name        = module.mainregion_poc_rg.name
-  location                   = module.mainregion_poc_rg.location
+  resource_group_name        = module.poc_rg.name
+  location                   = module.poc_rg.location
   sku                        = "PerGB2018"
   daily_quota_gb             = "0.5"
   retention_in_days          = 30
@@ -255,8 +215,8 @@ resource "azurerm_log_analytics_workspace" "poc_law" {
 }
 resource "azurerm_application_insights" "poc_appins" {
   name                       = lower("appins-${local.full_suffix}")
-  resource_group_name        = module.mainregion_poc_rg.name
-  location                   = module.mainregion_poc_rg.location
+  resource_group_name        = module.poc_rg.name
+  location                   = module.poc_rg.location
   workspace_id               = azurerm_log_analytics_workspace.poc_law.id
   application_type           = "web"
   retention_in_days          = "30"
@@ -265,47 +225,184 @@ resource "azurerm_application_insights" "poc_appins" {
   internet_query_enabled     = true
   tags                       = local.base_tags
 }
+#*/
 
 #--------------------------------------------------------------
-#   Application Gateway
+#   Key vault
 #--------------------------------------------------------------
-#   / VNet
-resource "azurerm_virtual_network" "appgw_vnet" {
-  name                = lower("vnet-for-appgw-${local.full_suffix}")
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-  address_space       = [local.appgw_vnet_space, "192.168.21.0/24"]
+resource "azurerm_key_vault" "kv" {
+  name                      = lower("kv-${local.full_suffix}")
+  resource_group_name       = module.poc_rg.name
+  location                  = module.poc_rg.location
+  tenant_id                 = data.azurerm_client_config.current.tenant_id
+  enable_rbac_authorization = true
+  sku_name                  = "standard"
+  # soft_delete_enabled             = true # Disabling Soft Delete is not allowed anymore as of 2020-12-15
+  purge_protection_enabled        = false
+  enabled_for_disk_encryption     = false
+  enabled_for_template_deployment = false
+  enabled_for_deployment          = false
+
+  # NOTE: AzureServices + subnet Id + Public access required for KV Private Endpoint use by Application Gateway
+  # Ref: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs#verify-firewall-permissions-to-key-vault
+  public_network_access_enabled = true
+  network_acls {
+    bypass                     = "AzureServices" # "None" | "AzureServices"
+    default_action             = "Deny"
+    ip_rules                   = [] # [module.publicip.public_ip]
+    virtual_network_subnet_ids = [azurerm_subnet.appgw_subnet.id]
+  }
 
   tags = local.base_tags
   lifecycle { ignore_changes = [tags["BuiltOn"]] }
 }
-# / Subnet for App Gateway
-resource "azurerm_subnet" "appgw_subnet" {
-  name                                      = "default"
-  resource_group_name                       = module.mainregion_poc_rg.name
-  virtual_network_name                      = azurerm_virtual_network.appgw_vnet.name
-  private_endpoint_network_policies_enabled = false
-  address_prefixes                          = ["10.0.0.0/24"] # [replace(local.vnet_space, "0/24", "64/27")]
+resource "azurerm_role_assignment" "terraform_role_to_kv_assignment" {
+  scope                = azurerm_key_vault.kv.id
+  role_definition_name = "Key Vault Administrator"
+  principal_id         = data.azurerm_client_config.current.object_id
 }
+#   / Create an external Private Endpoint to access KV data plane from terraform
+module "kv_external_pe" {
+  providers = { azurerm = azurerm.external }
+  source    = "../terraform-modules/pe"
 
-# / Subnet for App Gateway PEs
-resource "azurerm_subnet" "appgw_pe_subnet" {
-  name                                      = "snet-poc-appgw"
-  resource_group_name                       = module.mainregion_poc_rg.name
-  virtual_network_name                      = azurerm_virtual_network.appgw_vnet.name
-  private_endpoint_network_policies_enabled = true
-  address_prefixes                          = ["192.168.21.0/27"] # [replace(local.vnet_space, "0/24", "64/27")]
+  resource_id = azurerm_key_vault.kv.id
+
+  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+  location             = data.azurerm_virtual_network.external_vnet.location
+  subnet_id            = data.azurerm_subnet.external_subnet.id
+  subresource_names    = ["vault"]
+  is_manual_connection = false
+
+  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  cname_zone      = "vault.azure.net"
+  a_zone          = "vaultcore.azure.net"
+  ttl             = 10
+
+  tags = local.base_tags
 }
-# / Public IP for App Gateway
+module "kv_local_pe" {
+  source = "../terraform-modules/pe"
+
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
+
+  resource_id = azurerm_key_vault.kv.id
+
+  resource_group_name  = module.poc_rg.name
+  location             = module.poc_rg.location
+  subnet_id            = azurerm_subnet.pe_subnet.id
+  subresource_names    = ["vault"]
+  is_manual_connection = false
+
+  privdns_rg_name = module.poc_rg.name
+  cname_zone      = "vault.azure.net"
+  a_zone          = "vaultcore.azure.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+#*/
+
+#--------------------------------------------------------------
+#   Application Gateway
+#--------------------------------------------------------------
+#   / Public IP for App Gateway
 resource "azurerm_public_ip" "appgw_pip" {
-  name                = lower("pip-for-appgw-${local.full_suffix}")
-  location            = module.mainregion_poc_rg.location
-  resource_group_name = module.mainregion_poc_rg.name
+  name                = lower("pip-for-appgw-waf-${local.full_suffix}")
+  location            = module.poc_rg.location
+  resource_group_name = module.poc_rg.name
   allocation_method   = "Static"
   sku                 = "Standard"
   zones               = []
 }
-# / Application Gateway
+#   / Application Gateway VNet
+resource "azurerm_virtual_network" "appgw_vnet" {
+  name                = lower("vnet-for-appgw-waf-${local.full_suffix}")
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+  address_space       = [local.appgw_vnet_space]
+
+  tags = local.base_tags
+  lifecycle { ignore_changes = [tags["BuiltOn"]] }
+}
+
+#   / Subnet for App Gateway
+resource "azurerm_subnet" "appgw_subnet" {
+  # Recommended: /24 (256 IPs)
+  # Ref: https://learn.microsoft.com/en-us/azure/application-gateway/configuration-infrastructure#size-of-the-subnet
+  # Note: Virtual Network service endpoint policies are currently not supported in an Application Gateway subnet.
+
+  # This subnet is used by App Gateway instances
+  name                                      = "snet-appgw"
+  resource_group_name                       = module.poc_rg.name
+  virtual_network_name                      = azurerm_virtual_network.appgw_vnet.name
+  private_endpoint_network_policies_enabled = false
+  address_prefixes                          = [replace(azurerm_virtual_network.appgw_vnet.address_space[0], "0/24", "0/25")]
+
+  # Required, even if access is done by Private Endpoint (?!?!?!)
+  # Ref: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs#verify-firewall-permissions-to-key-vault
+  service_endpoints = [
+    "Microsoft.KeyVault",
+  ]
+}
+#   / Subnet for App Gateway Private Link integration
+resource "azurerm_subnet" "appgw_privlink_subnet" {
+  # This subnet is used to create Private Link connection to App Gateway
+  name                                      = "snet-appgw-priv-link"
+  resource_group_name                       = module.poc_rg.name
+  virtual_network_name                      = azurerm_virtual_network.appgw_vnet.name
+  private_endpoint_network_policies_enabled = false
+  address_prefixes                          = [replace(azurerm_virtual_network.appgw_vnet.address_space[0], "0/24", "128/28")]
+}
+#   / Private DNS Zones link to App Gateway VNet
+#     Link the required Private DNS Zones to App Gateway VNet to enable DNS resolution for App Gateway
+#       - Key vault to get the TLS certificates
+#       - Web App to redirect to App Services Private Endpoints
+resource "azurerm_private_dns_zone_virtual_network_link" "appgw_link" {
+  depends_on = [azurerm_private_dns_zone.this]
+
+  for_each = toset(["vault.azure.net", "vaultcore.azure.net", "azurewebsites.net", "privatelink.azurewebsites.net"])
+
+  name                  = "Link_to_${azurerm_virtual_network.appgw_vnet.name}"
+  resource_group_name   = module.poc_rg.name
+  private_dns_zone_name = each.value
+  virtual_network_id    = azurerm_virtual_network.appgw_vnet.id
+  registration_enabled  = false
+  tags                  = module.poc_rg.tags
+}
+#   / VNet Peering between App Gateway and PCR2 VNets
+#     It allows App Gateway to connecto to the Private Endpoints in the App VNet
+resource "azurerm_virtual_network_peering" "appgw_vnet_to_pcr2" {
+  name = lower("peering-to-pcr2-vnet")
+
+  # From
+  resource_group_name  = module.poc_rg.name
+  virtual_network_name = azurerm_virtual_network.appgw_vnet.name
+
+  # To
+  remote_virtual_network_id = azurerm_virtual_network.pcr2_vnet.id
+
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = false
+  allow_gateway_transit        = false
+  use_remote_gateways          = false
+}
+resource "azurerm_virtual_network_peering" "pcr2_to_appgw_vnet" {
+  name = lower("peering-to-appgw-vnet")
+
+  # From
+  resource_group_name  = module.poc_rg.name
+  virtual_network_name = azurerm_virtual_network.pcr2_vnet.name
+
+  # To
+  remote_virtual_network_id = azurerm_virtual_network.appgw_vnet.id
+
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+  allow_gateway_transit        = false
+  use_remote_gateways          = false
+}
+#   / Locals for naming conventions
 locals {
   backend_address_pool_name      = "be-app-pool"
   frontend_port_name             = "fe-port"
@@ -315,45 +412,81 @@ locals {
   request_routing_rule_name      = "rq-rt-rule"
   redirect_configuration_name    = "rdr-cfg"
 }
-# User Assigned Identity to be used by the App Gateway
+#   / User Assigned Identity to be used by the App Gateway
 resource "azurerm_user_assigned_identity" "appgw_uai" {
-  name                = lower("msi-for-appgw-${local.full_suffix}")
-  location            = module.mainregion_poc_rg.location
-  resource_group_name = module.mainregion_poc_rg.name
+  name                = lower("msi-appgw-waf-${local.full_suffix}")
+  location            = module.poc_rg.location
+  resource_group_name = module.poc_rg.name
 }
-# / To access Key Vault with this permissions (to get the SSL/TLS certificate)
+#   / To access Key Vault with this permissions (to get the SSL/TLS certificate)
 resource "azurerm_role_assignment" "appgw_uai_role_assignment_on_kv" {
   principal_id         = azurerm_user_assigned_identity.appgw_uai.principal_id
   role_definition_name = "Key Vault Administrator"
   scope                = azurerm_key_vault.kv.id
 }
+#   / TLS certificate used by App Gateway & App Service
+#     Following this setup: https://learn.microsoft.com/en-us/azure/application-gateway/configure-web-app?tabs=customdomain%2Cazure-portal
+resource "azurerm_key_vault_certificate" "tls_cert" {
+  name         = "${local.external_url_prefix}-tls-cert-kv"
+  key_vault_id = azurerm_key_vault.kv.id
 
-resource "azurerm_application_gateway" "appgw" {
-  name                = lower("appgw-${local.full_suffix}")
-  location            = module.mainregion_poc_rg.location
-  resource_group_name = module.mainregion_poc_rg.name
+  certificate {
+    contents = filebase64(var.tls_cert_path)
+    password = var.tls_cert_pwd
+  }
+  # IMPORTANT NOTE: Integration between Application Gateway and Key vault is tricky
+  # Refer to: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs
+  # To go through the setup and use the PowerShell script in /data/AppGw-HttpsCert-from-KV.ps1
+}
+resource "azurerm_web_application_firewall_policy" "appgw_waf" {
+  name                = lower("waf-policy-for-appgw-waf-${local.full_suffix}")
+  location            = module.poc_rg.location
+  resource_group_name = module.poc_rg.name
+
+  policy_settings {
+    enabled                     = true
+    mode                        = "Detection"
+    request_body_check          = true
+    file_upload_limit_in_mb     = 100
+    max_request_body_size_in_kb = 128
+  }
+
+  managed_rules {
+    managed_rule_set {
+      type    = "OWASP"
+      version = "3.2"
+    }
+  }
+}
+resource "azurerm_application_gateway" "appgw_pcr2" {
+  name                = lower("appgw-waf-${local.full_suffix}")
+  location            = module.poc_rg.location
+  resource_group_name = module.poc_rg.name
+
+  enable_http2       = true
+  firewall_policy_id = azurerm_web_application_firewall_policy.appgw_waf.id
 
   autoscale_configuration {
     max_capacity = 10
-    min_capacity = 1
+    min_capacity = 0
   }
 
   backend_address_pool {
-    fqdns = []
-    ip_addresses = [
-      "192.168.21.4",
+    name = "backend-pool-app-svc"
+    fqdns = [
+      # "webapp-win-use2-s4-pcr2-poc.azurewebsites.net",
+      azurerm_windows_web_app.poc_app_svc.default_hostname
     ]
-    name = "webapp-win-pe-backend"
+    ip_addresses = []
   }
 
   backend_http_settings {
+    name                                = "backend-settings-https"
     affinity_cookie_name                = "ApplicationGatewayAffinity"
     cookie_based_affinity               = "Disabled"
-    host_name                           = "${local.external_url_prefix}.${local.external_url_domain}"
-    name                                = "${local.external_url_prefix_trimmed}-https-backend-settings"
     pick_host_name_from_backend_address = false
     port                                = 443
-    probe_name                          = "${local.external_url_prefix_trimmed}-https-health-probe"
+    probe_name                          = "health-probe-https-ebdemosnet"
     protocol                            = "Https"
     request_timeout                     = 20
     trusted_root_certificate_names      = []
@@ -361,48 +494,77 @@ resource "azurerm_application_gateway" "appgw" {
 
   frontend_ip_configuration {
     name                 = "appGwPublicFrontendIpIPv4"
-    public_ip_address_id = azurerm_public_ip.appgw_pip.id
+    public_ip_address_id = azurerm_public_ip.appgw_pip.id # "/subscriptions/34144584-4817-47a0-a912-bd00bae76495/resourceGroups/rg-use2-s4-pcr2-poc/providers/Microsoft.Network/publicIPAddresses/pip-for-appgw-waf-use2-s4-pcr2-poc"
   }
   frontend_ip_configuration {
     name                            = "appGwPrivateFrontendIpIPv4"
     private_ip_address_allocation   = "Static"
-    private_link_configuration_name = "appgw-privatelink-private-frontend-ip-config"
-    subnet_id                       = azurerm_subnet.appgw_subnet.id
+    private_ip_address              = "192.168.25.10"
+    private_link_configuration_name = "private-link-config-private"
+    subnet_id                       = azurerm_subnet.appgw_subnet.id # "/subscriptions/34144584-4817-47a0-a912-bd00bae76495/resourceGroups/rg-use2-s4-pcr2-poc/providers/Microsoft.Network/virtualNetworks/vnet-for-appgw-waf-use2-s4-pcr2-poc/subnets/snet-appgw"
   }
 
+  frontend_port {
+    name = "port_80"
+    port = 80
+  }
   frontend_port {
     name = "port_443"
     port = 443
   }
-  frontend_port {
-    name = "port_80"
-    port = 80
+
+  http_listener {
+    name                           = "listener-https-private"
+    frontend_ip_configuration_name = "appGwPrivateFrontendIpIPv4"
+    frontend_port_name             = "port_443"
+    host_names                     = []
+    protocol                       = "Https"
+    require_sni                    = false
+    ssl_certificate_name           = "pcr2-poc-tls-cert-kv"
+  }
+
+  private_link_configuration {
+    name = "private-link-config-private"
+
+    ip_configuration {
+      name                          = "privateLinkIpConfig1"
+      primary                       = false
+      private_ip_address_allocation = "Dynamic"
+      subnet_id                     = azurerm_subnet.appgw_privlink_subnet.id # "/subscriptions/34144584-4817-47a0-a912-bd00bae76495/resourceGroups/rg-use2-s4-pcr2-poc/providers/Microsoft.Network/virtualNetworks/vnet-for-appgw-waf-use2-s4-pcr2-poc/subnets/snet-appgw-priv-link"
+    }
+  }
+
+  probe {
+    name                                      = "health-probe-https-ebdemosnet"
+    host                                      = "pcr2-poc.ebdemos.net"
+    interval                                  = 30
+    minimum_servers                           = 0
+    path                                      = "/"
+    pick_host_name_from_backend_http_settings = false
+    port                                      = 443
+    protocol                                  = "Https"
+    timeout                                   = 30
+    unhealthy_threshold                       = 3
+    match {
+      status_code = [
+        "401-403",
+      ]
+    }
+  }
+
+  request_routing_rule {
+    name                       = "routing-rule-https-ebdemosnet"
+    backend_address_pool_name  = "backend-pool-app-svc"
+    backend_http_settings_name = "backend-settings-https"
+    http_listener_name         = "listener-https-private"
+    # id                         = "/subscriptions/34144584-4817-47a0-a912-bd00bae76495/resourceGroups/rg-use2-s4-pcr2-poc/providers/Microsoft.Network/applicationGateways/appgw-waf-use2-s4-pcr2-poc/requestRoutingRules/routing-rule-https-ebdemosnet"
+    priority  = 500
+    rule_type = "Basic"
   }
 
   gateway_ip_configuration {
     name      = "appGatewayIpConfig"
     subnet_id = azurerm_subnet.appgw_subnet.id
-  }
-
-  http_listener {
-    frontend_ip_configuration_name = "appGwPrivateFrontendIpIPv4"
-    frontend_port_name             = "port_443"
-    host_name                      = "${local.external_url_prefix}.${local.external_url_domain}"
-    host_names                     = []
-    name                           = "${local.external_url_prefix_trimmed}-private-https-listener"
-    protocol                       = "Https"
-    require_sni                    = true
-    ssl_certificate_name           = local.external_url_prefix
-  }
-  http_listener {
-    frontend_ip_configuration_name = "appGwPublicFrontendIpIPv4"
-    frontend_port_name             = "port_443"
-    host_name                      = "${local.external_url_prefix}.${local.external_url_domain}"
-    host_names                     = []
-    name                           = "${local.external_url_prefix_trimmed}-https-listener"
-    protocol                       = "Https"
-    require_sni                    = true
-    ssl_certificate_name           = local.external_url_prefix
   }
 
   identity {
@@ -412,68 +574,21 @@ resource "azurerm_application_gateway" "appgw" {
     type = "UserAssigned"
   }
 
-  private_link_configuration {
-    # Reference: https://learn.microsoft.com/en-us/azure/application-gateway/private-link-configure?tabs=portal
-    name = "appgw-privatelink-private-frontend-ip-config"
-
-    ip_configuration {
-      name                          = "privateLinkIpConfig1"
-      primary                       = true
-      private_ip_address_allocation = "Dynamic"
-      subnet_id                     = azurerm_subnet.appgw_pe_subnet.id
-    }
-  }
-
-  probe {
-    host                                      = "${local.external_url_prefix}.${local.external_url_domain}"
-    interval                                  = 30
-    minimum_servers                           = 0
-    name                                      = "${local.external_url_prefix_trimmed}-https-health-probe"
-    path                                      = "/"
-    pick_host_name_from_backend_http_settings = false
-    port                                      = 443
-    protocol                                  = "Https"
-    timeout                                   = 30
-    unhealthy_threshold                       = 3
-    match {
-      status_code = [
-        "200-403",
-      ]
-    }
-  }
-
-  request_routing_rule {
-    backend_address_pool_name  = "webapp-win-pe-backend"
-    backend_http_settings_name = "${local.external_url_prefix_trimmed}-https-backend-settings"
-    http_listener_name         = "${local.external_url_prefix_trimmed}-https-listener"
-    name                       = "${local.external_url_prefix_trimmed}-https-routing-rule"
-    priority                   = 300
-    rule_type                  = "Basic"
-  }
-  request_routing_rule {
-    backend_address_pool_name  = "webapp-win-pe-backend"
-    backend_http_settings_name = "${local.external_url_prefix_trimmed}-https-backend-settings"
-    http_listener_name         = "${local.external_url_prefix_trimmed}-private-https-listener"
-    name                       = "${local.external_url_prefix_trimmed}-private-https-routing-rule"
-    priority                   = 200
-    rule_type                  = "Basic"
-  }
-
   sku {
-    name     = "Standard_v2"
-    tier     = "Standard_v2"
+    name     = "WAF_v2"
+    tier     = "WAF_v2"
     capacity = 0
   }
 
   ssl_certificate {
-    name                = local.external_url_prefix
-    key_vault_secret_id = "https://kv-use2-s4-${local.external_url_prefix}.vault.azure.net:443/secrets/${local.external_url_prefix}/"
+    name                = azurerm_key_vault_certificate.tls_cert.name
+    key_vault_secret_id = "https://kv-use2-s4-${local.full_suffix}.vault.azure.net:443/secrets/${azurerm_key_vault_certificate.tls_cert.name}/"
     # IMPORTANT: The Key vault is RBAC enabled, so the certificate must be imported in App Gateway through scipt (doesn't work with portal)
     # As per: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs?WT.mc_id=Portal-Microsoft_Azure_HybridNetworking#key-vault-azure-role-based-access-control-permission-model
   }
 }
-
 #   / Create Private DNS Zone and Endpoint for internal users from Hub
+/*
 resource "azurerm_private_dns_zone" "ebdemos" {
   provider = azurerm.external
 
@@ -522,7 +637,436 @@ resource "azurerm_private_dns_a_record" "external_url_a_record" {
   records             = ["${module.appgw_external_pe.private_ip_address}"]
   tags                = local.base_tags
 }
+#*/
 
+#--------------------------------------------------------------
+#   Storage Accounts
+#--------------------------------------------------------------
+#   / Drop Storage
+resource "azurerm_storage_account" "drop_st" {
+  name                = lower(replace("st-${local.full_suffix}-drop", "-", ""))
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+
+  account_kind             = "StorageV2"
+  account_tier             = "Standard"
+  account_replication_type = "RAGRS"
+
+  allow_nested_items_to_be_public = false    #Disable anonymous public read access to containers and blobs
+  enable_https_traffic_only       = true     #Require secure transfer (HTTPS) to the storage account for REST API Operations
+  min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
+  is_hns_enabled                  = false    #Enables Hierachical namespace, required for SFTP
+  sftp_enabled                    = false
+  public_network_access_enabled   = false
+
+  tags = local.base_tags
+  lifecycle { ignore_changes = [tags["BuiltOn"]] }
+}
+resource "azurerm_storage_account_network_rules" "drop_st_nr" {
+  # Prevents locking the Storage Account before all resources are created
+  depends_on = [
+    azurerm_storage_account.drop_st
+  ]
+
+  storage_account_id         = azurerm_storage_account.drop_st.id
+  default_action             = "Deny"
+  ip_rules                   = []
+  virtual_network_subnet_ids = []
+  bypass                     = ["None"]
+}
+resource "azurerm_storage_container" "mft_drop" {
+  name                  = "mft-drop"
+  storage_account_name  = azurerm_storage_account.drop_st.name
+  container_access_type = "private"
+}
+module "drop_st_local_pe" {
+  source     = "../terraform-modules/pe"
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
+
+  resource_id         = azurerm_storage_account.drop_st.id
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+
+  subnet_id            = azurerm_subnet.pe_subnet.id
+  subresource_names    = ["blob"]
+  is_manual_connection = false
+
+  privdns_rg_name = module.poc_rg.name
+  cname_zone      = "blob.core.windows.net"
+  a_zone          = "privatelink.blob.core.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+module "drop_st_external_pe" {
+  providers = { azurerm = azurerm.external }
+  source    = "../terraform-modules/pe"
+
+  resource_id = azurerm_storage_account.drop_st.id
+
+  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+  location             = data.azurerm_virtual_network.external_vnet.location
+  subnet_id            = data.azurerm_subnet.external_subnet.id
+  subresource_names    = ["blob"]
+  is_manual_connection = false
+
+  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  cname_zone      = "blob.core.windows.net"
+  a_zone          = "privatelink.blob.core.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+#   / Archive Storage
+resource "azurerm_storage_account" "archive_st" {
+  name                = lower(replace("st-${local.full_suffix}-archive", "-", ""))
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+
+  account_kind             = "StorageV2"
+  account_tier             = "Standard"
+  account_replication_type = "ZRS"
+
+  allow_nested_items_to_be_public = false    #Disable anonymous public read access to containers and blobs
+  enable_https_traffic_only       = true     #Require secure transfer (HTTPS) to the storage account for REST API Operations
+  min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
+  is_hns_enabled                  = false
+  sftp_enabled                    = false
+  public_network_access_enabled   = false
+
+  tags = local.base_tags
+  lifecycle { ignore_changes = [tags["BuiltOn"]] }
+}
+resource "azurerm_storage_account_network_rules" "archive_st_nr" {
+  # Prevents locking the Storage Account before all resources are created
+  depends_on = [
+    azurerm_storage_account.archive_st
+  ]
+
+  storage_account_id         = azurerm_storage_account.archive_st.id
+  default_action             = "Deny"
+  ip_rules                   = []
+  virtual_network_subnet_ids = []
+  bypass                     = ["None"]
+}
+resource "azurerm_storage_container" "cy_container" {
+  name                  = "2023-archives"
+  storage_account_name  = azurerm_storage_account.archive_st.name
+  container_access_type = "private"
+}
+resource "azurerm_storage_container" "andet_container" {
+  name                  = "anomaly-data"
+  storage_account_name  = azurerm_storage_account.archive_st.name
+  container_access_type = "private"
+}
+module "archive_st_local_pe" {
+  source     = "../terraform-modules/pe"
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
+
+  resource_id         = azurerm_storage_account.archive_st.id
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+
+  subnet_id            = azurerm_subnet.pe_subnet.id
+  subresource_names    = ["blob"]
+  is_manual_connection = false
+
+  privdns_rg_name = module.poc_rg.name
+  cname_zone      = "blob.core.windows.net"
+  a_zone          = "privatelink.blob.core.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+module "archive_st_external_pe" {
+  providers = { azurerm = azurerm.external }
+  source    = "../terraform-modules/pe"
+
+  resource_id = azurerm_storage_account.archive_st.id
+
+  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+  location             = data.azurerm_virtual_network.external_vnet.location
+  subnet_id            = data.azurerm_subnet.external_subnet.id
+  subresource_names    = ["blob"]
+  is_manual_connection = false
+
+  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  cname_zone      = "blob.core.windows.net"
+  a_zone          = "privatelink.blob.core.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+
+#   / Web App + Function App Storage
+resource "azurerm_storage_account" "app_svc_st" {
+  name                = substr(lower(replace("st-${local.full_suffix}-appsvc-support", "-", "")), 0, 24)
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+
+  account_kind             = "StorageV2"
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+
+  allow_nested_items_to_be_public = false    #Disable anonymous public read access to containers and blobs
+  enable_https_traffic_only       = true     #Require secure transfer (HTTPS) to the storage account for REST API Operations
+  min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
+  is_hns_enabled                  = false
+  sftp_enabled                    = false
+  public_network_access_enabled   = false
+
+  tags = local.base_tags
+  lifecycle { ignore_changes = [tags["BuiltOn"]] }
+}
+resource "azurerm_storage_account_network_rules" "app_svc_st_nr" {
+  # Prevents locking the Storage Account before all resources are created
+  depends_on = [
+    azurerm_storage_account.app_svc_st
+  ]
+
+  storage_account_id         = azurerm_storage_account.app_svc_st.id
+  default_action             = "Deny"
+  ip_rules                   = []
+  virtual_network_subnet_ids = []
+  bypass                     = ["None"]
+}
+resource "azurerm_storage_container" "winwebapp_logs_container" {
+  name                  = "win-web-app-logs"
+  storage_account_name  = azurerm_storage_account.app_svc_st.name
+  container_access_type = "private"
+}
+module "app_svc_st_local_pe" {
+  source     = "../terraform-modules/pe"
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
+
+  resource_id         = azurerm_storage_account.app_svc_st.id
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+
+  subnet_id            = azurerm_subnet.pe_subnet.id
+  subresource_names    = ["blob"]
+  is_manual_connection = false
+
+  privdns_rg_name = module.poc_rg.name
+  cname_zone      = "blob.core.windows.net"
+  a_zone          = "privatelink.blob.core.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+module "app_svc_st_external_pe" {
+  providers = { azurerm = azurerm.external }
+  source    = "../terraform-modules/pe"
+
+  resource_id = azurerm_storage_account.app_svc_st.id
+
+  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+  location             = data.azurerm_virtual_network.external_vnet.location
+  subnet_id            = data.azurerm_subnet.external_subnet.id
+  subresource_names    = ["blob"]
+  is_manual_connection = false
+
+  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  cname_zone      = "blob.core.windows.net"
+  a_zone          = "privatelink.blob.core.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+
+#   / SFTP Storage
+resource "azurerm_storage_account" "sftp_st" {
+  name                = lower(replace("st-${local.full_suffix}-sftp", "-", ""))
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+
+  account_kind             = "StorageV2"
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+
+  allow_nested_items_to_be_public = false    #Disable anonymous public read access to containers and blobs
+  enable_https_traffic_only       = true     #Require secure transfer (HTTPS) to the storage account for REST API Operations
+  min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
+  is_hns_enabled                  = true     #Enables Hierachical namespace, required for SFTP
+  sftp_enabled                    = true
+  public_network_access_enabled   = true
+
+  tags = local.base_tags
+  lifecycle { ignore_changes = [tags["BuiltOn"]] }
+}
+resource "azurerm_storage_account_network_rules" "sftp_st_nr" {
+  # Prevents locking the Storage Account before all resources are created
+  depends_on = [
+    azurerm_storage_account.sftp_st
+  ]
+
+  storage_account_id         = azurerm_storage_account.sftp_st.id
+  default_action             = "Deny"
+  ip_rules                   = [azurerm_public_ip.appsvc_int_natgw_pip.ip_address]
+  virtual_network_subnet_ids = []
+  bypass                     = ["None"]
+}
+resource "azurerm_storage_container" "sftp_cont" {
+  name                  = "sftp-user1"
+  storage_account_name  = azurerm_storage_account.sftp_st.name
+  container_access_type = "private"
+}
+module "sftp_st_local_pe" {
+  source     = "../terraform-modules/pe"
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
+
+  resource_id = azurerm_storage_account.sftp_st.id
+
+  resource_group_name  = module.poc_rg.name
+  location             = module.poc_rg.location
+  subnet_id            = azurerm_subnet.pe_subnet.id
+  subresource_names    = ["blob"]
+  is_manual_connection = false
+
+  privdns_rg_name = module.poc_rg.name
+  cname_zone      = "blob.core.windows.net"
+  a_zone          = "privatelink.blob.core.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+module "sftp_st_external_pe" {
+  providers = { azurerm = azurerm.external }
+  source    = "../terraform-modules/pe"
+
+  resource_id = azurerm_storage_account.sftp_st.id
+
+  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+  location             = data.azurerm_virtual_network.external_vnet.location
+  subnet_id            = data.azurerm_subnet.external_subnet.id
+  subresource_names    = ["blob"]
+  is_manual_connection = false
+
+  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  cname_zone      = "blob.core.windows.net"
+  a_zone          = "privatelink.blob.core.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+#   / Create SFTP Username secret in KV
+resource "azurerm_key_vault_secret" "sftpuser_name_secret" {
+  name         = "sftp-user"
+  key_vault_id = azurerm_key_vault.kv.id
+  value        = "${azurerm_storage_account.sftp_st.name}.${var.sftp_user_name}"
+}
+#   / Create SFTP User password secret in KV
+resource "azurerm_key_vault_secret" "sftpuser_pwd_secret" {
+  name         = "sftp-password"
+  key_vault_id = azurerm_key_vault.kv.id
+  value        = var.sftp_user_pwd
+}
+
+
+#--------------------------------------------------------------
+#   Anomaly Detector AI
+#--------------------------------------------------------------
+resource "azurerm_cognitive_account" "anomaly_detector" {
+  name                = lower("andetect-${local.full_suffix}")
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+
+  kind                          = "AnomalyDetector"
+  custom_subdomain_name         = lower("andetect-${local.full_suffix}")
+  dynamic_throttling_enabled    = false
+  fqdns                         = []
+  sku_name                      = "S0"
+  public_network_access_enabled = false
+
+  network_acls {
+    default_action = "Deny"
+    ip_rules       = []
+  }
+}
+module "anomaly_detector_local_pe" {
+  source = "../terraform-modules/pe"
+
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
+
+  resource_id         = azurerm_cognitive_account.anomaly_detector.id
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+
+  subnet_id            = azurerm_subnet.pe_subnet.id
+  subresource_names    = ["account"]
+  is_manual_connection = false
+
+  privdns_rg_name = module.poc_rg.name
+  cname_zone      = null
+  a_zone          = "cognitiveservices.azure.com"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+
+#--------------------------------------------------------------
+#   Azure SQL Server + Database
+#--------------------------------------------------------------
+#   / Main region SQL Server + DB
+resource "azurerm_mssql_server" "poc_sql_server" {
+  name                = lower("sqlsvr-${local.full_suffix}")
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
+  version             = "12.0"
+
+  azuread_administrator {
+    azuread_authentication_only = true
+    login_username              = "eb@mngenvmcap446692.onmicrosoft.com"
+    object_id                   = "16f07509-4609-4a32-a816-2c7178c313a3"
+  }
+}
+resource "azurerm_mssql_database" "poc_sql_db" {
+  name         = lower("sqldb-poc")
+  server_id    = azurerm_mssql_server.poc_sql_server.id
+  collation    = "SQL_Latin1_General_CP1_CI_AS"
+  license_type = "LicenseIncluded"
+  max_size_gb  = 2
+  sku_name     = "S0"
+}
+module "sqlsvr_local_pe" {
+  source     = "../terraform-modules/pe"
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
+
+  resource_id = azurerm_mssql_server.poc_sql_server.id
+
+  resource_group_name  = module.poc_rg.name
+  location             = module.poc_rg.location
+  subnet_id            = azurerm_subnet.pe_subnet.id
+  subresource_names    = ["sqlServer"]
+  is_manual_connection = false
+
+  privdns_rg_name = module.poc_rg.name
+  cname_zone      = "database.windows.net"
+  a_zone          = "privatelink.database.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+module "sqlsvr_external_pe" {
+  providers = { azurerm = azurerm.external }
+  source    = "../terraform-modules/pe"
+
+  resource_id = azurerm_mssql_server.poc_sql_server.id
+
+  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+  location             = data.azurerm_virtual_network.external_vnet.location
+  subnet_id            = data.azurerm_subnet.external_subnet.id
+  subresource_names    = ["sqlServer"]
+  is_manual_connection = false
+
+  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  cname_zone      = "database.windows.net"
+  a_zone          = "privatelink.database.windows.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+#*/
 
 #--------------------------------------------------------------
 #   Application Service Authentication App Registration
@@ -576,506 +1120,6 @@ resource "azuread_application_password" "azsp_app_pwd" {
   application_object_id = azuread_application.azsp_app.id
   end_date_relative     = "26280h" # 3 years
 }
-
-#--------------------------------------------------------------
-#   Azure SQL Server + Database
-#--------------------------------------------------------------
-#   / Main region SQL Server + DB
-resource "azurerm_mssql_server" "poc_sql_server" {
-  name                = lower("sqlsvr-${local.full_suffix}")
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-  version             = "12.0"
-
-  azuread_administrator {
-    azuread_authentication_only = true
-    login_username              = "eb@mngenvmcap446692.onmicrosoft.com"
-    object_id                   = "16f07509-4609-4a32-a816-2c7178c313a3"
-  }
-}
-resource "azurerm_mssql_database" "poc_sql_db" {
-  name         = lower("sqldb-poc")
-  server_id    = azurerm_mssql_server.poc_sql_server.id
-  collation    = "SQL_Latin1_General_CP1_CI_AS"
-  license_type = "LicenseIncluded"
-  max_size_gb  = 2
-  sku_name     = "S0"
-}
-module "sqlsvr_local_pe" {
-  source     = "../terraform-modules/pe"
-  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
-
-  resource_id         = azurerm_mssql_server.poc_sql_server.id
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-
-  subnet_id            = azurerm_subnet.pe_subnet.id
-  subresource_names    = ["sqlServer"]
-  is_manual_connection = false
-
-  privdns_rg_name = module.mainregion_poc_rg.name
-  cname_zone      = "database.windows.net"
-  a_zone          = "privatelink.database.windows.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-module "sqlsvr_external_pe" {
-  providers = { azurerm = azurerm.external }
-  source    = "../terraform-modules/pe"
-
-  resource_id = azurerm_mssql_server.poc_sql_server.id
-
-  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
-  location             = data.azurerm_virtual_network.external_vnet.location
-  subnet_id            = data.azurerm_subnet.external_subnet.id
-  subresource_names    = ["sqlServer"]
-  is_manual_connection = false
-
-  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "database.windows.net"
-  a_zone          = "privatelink.database.windows.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-
-#--------------------------------------------------------------
-#   Storage Accounts
-#--------------------------------------------------------------
-#   / Drop Storage
-resource "azurerm_storage_account" "drop_st" {
-  name                = lower(replace("st-${local.full_suffix}-drop", "-", ""))
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-
-  account_kind             = "StorageV2"
-  account_tier             = "Standard"
-  account_replication_type = "RAGRS"
-
-  allow_nested_items_to_be_public = false    #Disable anonymous public read access to containers and blobs
-  enable_https_traffic_only       = true     #Require secure transfer (HTTPS) to the storage account for REST API Operations
-  min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
-  is_hns_enabled                  = false    #Enables Hierachical namespace, required for SFTP
-  sftp_enabled                    = false
-  public_network_access_enabled   = false
-
-  tags = local.base_tags
-  lifecycle { ignore_changes = [tags["BuiltOn"]] }
-}
-resource "azurerm_storage_account_network_rules" "drop_st_nr" {
-  # Prevents locking the Storage Account before all resources are created
-  depends_on = [
-    azurerm_storage_account.drop_st
-  ]
-
-  storage_account_id         = azurerm_storage_account.drop_st.id
-  default_action             = "Deny"
-  ip_rules                   = []
-  virtual_network_subnet_ids = []
-  bypass                     = ["None"]
-}
-resource "azurerm_storage_container" "mft_drop" {
-  name                  = "mft-drop"
-  storage_account_name  = azurerm_storage_account.drop_st.name
-  container_access_type = "private"
-}
-module "drop_st_local_pe" {
-  source     = "../terraform-modules/pe"
-  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
-
-  resource_id         = azurerm_storage_account.drop_st.id
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-
-  subnet_id            = azurerm_subnet.pe_subnet.id
-  subresource_names    = ["blob"]
-  is_manual_connection = false
-
-  privdns_rg_name = module.mainregion_poc_rg.name
-  cname_zone      = "blob.core.windows.net"
-  a_zone          = "privatelink.blob.core.windows.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-module "drop_st_external_pe" {
-  providers = { azurerm = azurerm.external }
-  source    = "../terraform-modules/pe"
-
-  resource_id = azurerm_storage_account.drop_st.id
-
-  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
-  location             = data.azurerm_virtual_network.external_vnet.location
-  subnet_id            = data.azurerm_subnet.external_subnet.id
-  subresource_names    = ["blob"]
-  is_manual_connection = false
-
-  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "blob.core.windows.net"
-  a_zone          = "privatelink.blob.core.windows.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-#   / Archive Storage
-resource "azurerm_storage_account" "archive_st" {
-  name                = lower(replace("st-${local.full_suffix}-archive", "-", ""))
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-
-  account_kind             = "StorageV2"
-  account_tier             = "Standard"
-  account_replication_type = "ZRS"
-
-  allow_nested_items_to_be_public = false    #Disable anonymous public read access to containers and blobs
-  enable_https_traffic_only       = true     #Require secure transfer (HTTPS) to the storage account for REST API Operations
-  min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
-  is_hns_enabled                  = false
-  sftp_enabled                    = false
-  public_network_access_enabled   = false
-
-  tags = local.base_tags
-  lifecycle { ignore_changes = [tags["BuiltOn"]] }
-}
-resource "azurerm_storage_account_network_rules" "archive_st_nr" {
-  # Prevents locking the Storage Account before all resources are created
-  depends_on = [
-    azurerm_storage_account.archive_st
-  ]
-
-  storage_account_id         = azurerm_storage_account.archive_st.id
-  default_action             = "Deny"
-  ip_rules                   = []
-  virtual_network_subnet_ids = []
-  bypass                     = ["None"]
-}
-resource "azurerm_storage_container" "cy_container" {
-  name                  = "2023-archives"
-  storage_account_name  = azurerm_storage_account.archive_st.name
-  container_access_type = "private"
-}
-resource "azurerm_storage_container" "andet_container" {
-  name                  = "anomaly-data"
-  storage_account_name  = azurerm_storage_account.archive_st.name
-  container_access_type = "private"
-}
-module "archive_st_local_pe" {
-  source     = "../terraform-modules/pe"
-  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
-
-  resource_id         = azurerm_storage_account.archive_st.id
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-
-  subnet_id            = azurerm_subnet.pe_subnet.id
-  subresource_names    = ["blob"]
-  is_manual_connection = false
-
-  privdns_rg_name = module.mainregion_poc_rg.name
-  cname_zone      = "blob.core.windows.net"
-  a_zone          = "privatelink.blob.core.windows.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-module "archive_st_external_pe" {
-  providers = { azurerm = azurerm.external }
-  source    = "../terraform-modules/pe"
-
-  resource_id = azurerm_storage_account.archive_st.id
-
-  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
-  location             = data.azurerm_virtual_network.external_vnet.location
-  subnet_id            = data.azurerm_subnet.external_subnet.id
-  subresource_names    = ["blob"]
-  is_manual_connection = false
-
-  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "blob.core.windows.net"
-  a_zone          = "privatelink.blob.core.windows.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-
-#   / Web App + Function App Storage
-resource "azurerm_storage_account" "app_svc_st" {
-  name                = substr(lower(replace("st-${local.full_suffix}-appsvc-support", "-", "")), 0, 24)
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-
-  account_kind             = "StorageV2"
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-
-  allow_nested_items_to_be_public = false    #Disable anonymous public read access to containers and blobs
-  enable_https_traffic_only       = true     #Require secure transfer (HTTPS) to the storage account for REST API Operations
-  min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
-  is_hns_enabled                  = false
-  sftp_enabled                    = false
-  public_network_access_enabled   = false
-
-  tags = local.base_tags
-  lifecycle { ignore_changes = [tags["BuiltOn"]] }
-}
-resource "azurerm_storage_account_network_rules" "app_svc_st_nr" {
-  # Prevents locking the Storage Account before all resources are created
-  depends_on = [
-    azurerm_storage_account.app_svc_st
-  ]
-
-  storage_account_id         = azurerm_storage_account.app_svc_st.id
-  default_action             = "Deny"
-  ip_rules                   = []
-  virtual_network_subnet_ids = []
-  bypass                     = ["None"]
-}
-resource "azurerm_storage_container" "winwebapp_logs_container" {
-  name                  = "win-web-app-logs"
-  storage_account_name  = azurerm_storage_account.app_svc_st.name
-  container_access_type = "private"
-}
-module "app_svc_st_local_pe" {
-  source     = "../terraform-modules/pe"
-  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
-
-  resource_id         = azurerm_storage_account.app_svc_st.id
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-
-  subnet_id            = azurerm_subnet.pe_subnet.id
-  subresource_names    = ["blob"]
-  is_manual_connection = false
-
-  privdns_rg_name = module.mainregion_poc_rg.name
-  cname_zone      = "blob.core.windows.net"
-  a_zone          = "privatelink.blob.core.windows.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-module "app_svc_st_external_pe" {
-  providers = { azurerm = azurerm.external }
-  source    = "../terraform-modules/pe"
-
-  resource_id = azurerm_storage_account.app_svc_st.id
-
-  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
-  location             = data.azurerm_virtual_network.external_vnet.location
-  subnet_id            = data.azurerm_subnet.external_subnet.id
-  subresource_names    = ["blob"]
-  is_manual_connection = false
-
-  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "blob.core.windows.net"
-  a_zone          = "privatelink.blob.core.windows.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-
-#   / SFTP Storage
-resource "azurerm_storage_account" "sftp_st" {
-  name                = lower(replace("st-${local.full_suffix}-sftp", "-", ""))
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-
-  account_kind             = "StorageV2"
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-
-  allow_nested_items_to_be_public = false    #Disable anonymous public read access to containers and blobs
-  enable_https_traffic_only       = true     #Require secure transfer (HTTPS) to the storage account for REST API Operations
-  min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
-  is_hns_enabled                  = true     #Enables Hierachical namespace, required for SFTP
-  sftp_enabled                    = true
-  public_network_access_enabled   = true
-
-  tags = local.base_tags
-  lifecycle { ignore_changes = [tags["BuiltOn"]] }
-}
-resource "azurerm_storage_account_network_rules" "sftp_st_nr" {
-  # Prevents locking the Storage Account before all resources are created
-  depends_on = [
-    azurerm_storage_account.sftp_st
-  ]
-
-  storage_account_id         = azurerm_storage_account.sftp_st.id
-  default_action             = "Deny"
-  ip_rules                   = [azurerm_public_ip.appsvc_int_natgw_pip.ip_address]
-  virtual_network_subnet_ids = []
-  bypass                     = ["None"]
-}
-resource "azurerm_storage_container" "sftp_cont" {
-  name                  = "sftp-user1"
-  storage_account_name  = azurerm_storage_account.sftp_st.name
-  container_access_type = "private"
-}
-module "sftp_st_local_pe" {
-  source     = "../terraform-modules/pe"
-  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
-
-  resource_id = azurerm_storage_account.sftp_st.id
-
-  resource_group_name  = module.mainregion_poc_rg.name
-  location             = module.mainregion_poc_rg.location
-  subnet_id            = azurerm_subnet.pe_subnet.id
-  subresource_names    = ["blob"]
-  is_manual_connection = false
-
-  privdns_rg_name = module.mainregion_poc_rg.name
-  cname_zone      = "blob.core.windows.net"
-  a_zone          = "privatelink.blob.core.windows.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-module "sftp_st_external_pe" {
-  providers = { azurerm = azurerm.external }
-  source    = "../terraform-modules/pe"
-
-  resource_id = azurerm_storage_account.sftp_st.id
-
-  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
-  location             = data.azurerm_virtual_network.external_vnet.location
-  subnet_id            = data.azurerm_subnet.external_subnet.id
-  subresource_names    = ["blob"]
-  is_manual_connection = false
-
-  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "blob.core.windows.net"
-  a_zone          = "privatelink.blob.core.windows.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-#   / Create SFTP Username secret in KV
-resource "azurerm_key_vault_secret" "sftpuser_name_secret" {
-  name         = "sftp-user"
-  key_vault_id = azurerm_key_vault.kv.id
-  value        = "${azurerm_storage_account.sftp_st.name}.${var.sftp_user_name}"
-}
-#   / Create SFTP User password secret in KV
-resource "azurerm_key_vault_secret" "sftpuser_pwd_secret" {
-  name         = "sftp-password"
-  key_vault_id = azurerm_key_vault.kv.id
-  value        = var.sftp_user_pwd
-}
-
-#--------------------------------------------------------------
-#   Anomaly Detector AI
-#--------------------------------------------------------------
-resource "azurerm_cognitive_account" "anomaly_detector" {
-  name                = lower("andetect-${local.full_suffix}")
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-
-  kind                          = "AnomalyDetector"
-  custom_subdomain_name         = lower("andetect-${local.full_suffix}")
-  dynamic_throttling_enabled    = false
-  fqdns                         = []
-  sku_name                      = "S0"
-  public_network_access_enabled = false
-
-  network_acls {
-    default_action = "Deny"
-    ip_rules       = []
-  }
-}
-module "anomaly_detector_local_pe" {
-  source = "../terraform-modules/pe"
-
-  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
-
-  resource_id         = azurerm_cognitive_account.anomaly_detector.id
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
-
-  subnet_id            = azurerm_subnet.pe_subnet.id
-  subresource_names    = ["account"]
-  is_manual_connection = false
-
-  privdns_rg_name = module.mainregion_poc_rg.name
-  cname_zone      = null
-  a_zone          = "cognitiveservices.azure.com"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-
-#--------------------------------------------------------------
-#   Key vault
-#--------------------------------------------------------------
-resource "azurerm_key_vault" "kv" {
-  name                      = lower("kv-${local.full_suffix}")
-  resource_group_name       = module.mainregion_poc_rg.name
-  location                  = module.mainregion_poc_rg.location
-  tenant_id                 = data.azurerm_client_config.current.tenant_id
-  enable_rbac_authorization = true
-  sku_name                  = "standard"
-  # soft_delete_enabled             = true # Disabling Soft Delete is not allowed anymore as of 2020-12-15
-  purge_protection_enabled        = false
-  enabled_for_disk_encryption     = false
-  enabled_for_template_deployment = false
-  enabled_for_deployment          = false
-  public_network_access_enabled   = false
-
-  network_acls {
-    bypass         = "None" # "AzureServices"
-    default_action = "Deny"
-    ip_rules       = [] # [module.publicip.public_ip]
-    # virtual_network_subnet_ids = var.virtual_network_subnet_ids
-  }
-
-  tags = local.base_tags
-  lifecycle { ignore_changes = [tags["BuiltOn"]] }
-}
-resource "azurerm_role_assignment" "terraform_role_to_kv_assignment" {
-  scope                = azurerm_key_vault.kv.id
-  role_definition_name = "Key Vault Administrator"
-  principal_id         = data.azurerm_client_config.current.object_id
-}
-module "kv_local_pe" {
-  source = "../terraform-modules/pe"
-
-  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
-
-  resource_id = azurerm_key_vault.kv.id
-
-  resource_group_name  = module.mainregion_poc_rg.name
-  location             = module.mainregion_poc_rg.location
-  subnet_id            = azurerm_subnet.pe_subnet.id
-  subresource_names    = ["vault"]
-  is_manual_connection = false
-
-  privdns_rg_name = module.mainregion_poc_rg.name
-  cname_zone      = "vault.azure.net"
-  a_zone          = "vaultcore.azure.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
-#   / Create an external Private Endpoint to access KV data plane from terraform
-module "kv_external_pe" {
-  providers = { azurerm = azurerm.external }
-  source    = "../terraform-modules/pe"
-
-  resource_id = azurerm_key_vault.kv.id
-
-  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
-  location             = data.azurerm_virtual_network.external_vnet.location
-  subnet_id            = data.azurerm_subnet.external_subnet.id
-  subresource_names    = ["vault"]
-  is_manual_connection = false
-
-  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "vault.azure.net"
-  a_zone          = "vaultcore.azure.net"
-  ttl             = 10
-
-  tags = local.base_tags
-}
 #   / Create Authentication Service Principal secret
 resource "azurerm_key_vault_secret" "spn_pwd_secret" {
   name         = azuread_application.azsp_app.display_name
@@ -1089,8 +1133,8 @@ resource "azurerm_key_vault_secret" "spn_pwd_secret" {
 #   / Main region App Service
 resource "azurerm_service_plan" "poc_app_svc_plan" {
   name                = lower("appsvcplan-win-${local.full_suffix}")
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
   os_type             = "Windows"
   sku_name            = "S1"
   tags                = local.base_tags
@@ -1098,8 +1142,8 @@ resource "azurerm_service_plan" "poc_app_svc_plan" {
 #   / Windows Web App
 resource "azurerm_windows_web_app" "poc_app_svc" {
   name                = lower("webapp-win-${local.full_suffix}")
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
   service_plan_id     = azurerm_service_plan.poc_app_svc_plan.id
 
   public_network_access_enabled = false
@@ -1121,7 +1165,7 @@ resource "azurerm_windows_web_app" "poc_app_svc" {
     ip_restriction {
       action     = "Allow"
       headers    = []
-      ip_address = "X.X.X.X/Y"
+      ip_address = "35.142.168.71/32"
       name       = "MyIP"
       priority   = 200
     }
@@ -1141,7 +1185,7 @@ resource "azurerm_windows_web_app" "poc_app_svc" {
     require_authentication   = true
     require_https            = true
     runtime_version          = "~1"
-    unauthenticated_action   = "RedirectToLoginPage"
+    unauthenticated_action   = "RedirectToLoginPage" # "AllowAnonymous" | "RedirectToLoginPage"
 
     active_directory_v2 {
       allowed_applications = []
@@ -1206,6 +1250,9 @@ resource "azurerm_windows_web_app" "poc_app_svc" {
     "ArchiveAnDetBlobName"      = "request-data.csv"
     "AnDetEndpoint"             = azurerm_cognitive_account.anomaly_detector.endpoint
     "AnDetKey"                  = azurerm_cognitive_account.anomaly_detector.primary_access_key
+
+    # Keep some development messages
+    "ASPNETCORE_ENVIRONMENT" = "Development"
   }
 
   sticky_settings {
@@ -1248,6 +1295,41 @@ resource "azurerm_windows_web_app" "poc_app_svc" {
 
   tags = local.base_tags
 }
+#   / Private Endpoint for local connections through App Gateway
+module "appsvc_local_pe" {
+  source     = "../terraform-modules/pe"
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
+
+  resource_id = azurerm_windows_web_app.poc_app_svc.id
+
+  resource_group_name  = module.poc_rg.name
+  location             = module.poc_rg.location
+  subnet_id            = azurerm_subnet.pe_subnet.id
+  subresource_names    = ["sites"]
+  is_manual_connection = false
+
+  privdns_rg_name = module.poc_rg.name
+  cname_zone      = "azurewebsites.net"
+  a_zone          = "privatelink.azurewebsites.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+#   / Private DNS entry for SCM for local connections through App Gateway (Publish from VS/CD Pipeline)
+module "appsvc_scm_local_privdns" {
+  source = "../terraform-modules/pe-dns"
+
+  record_name        = "${azurerm_windows_web_app.poc_app_svc.name}.scm"
+  private_ip_address = module.appsvc_local_pe.private_ip_address
+
+  privdns_rg_name = module.poc_rg.name
+  cname_zone      = "azurewebsites.net"
+  a_zone          = "privatelink.azurewebsites.net"
+  ttl             = 10
+
+  tags = local.base_tags
+}
+
 #   / Private Endpoint for External incoming connections
 module "appsvc_external_pe" {
   providers = { azurerm = azurerm.external }
@@ -1268,7 +1350,7 @@ module "appsvc_external_pe" {
 
   tags = local.base_tags
 }
-#   / Private DNS entry for SCM for External incoming connections
+#   / Private DNS entry for SCM for External incoming connections (Publish from VS/CD Pipeline)
 module "appsvc_scm_external_privdns" {
   source    = "../terraform-modules/pe-dns"
   providers = { azurerm = azurerm.external }
@@ -1325,14 +1407,16 @@ resource "azurerm_role_assignment" "webapp_msi_kv_secret_user" {
 # 4. Upload request-data.csv in the the "anomaly-data" container of the Archive Storage Account
 #    Source file is here: https://raw.githubusercontent.com/Azure/azure-sdk-for-python/main/sdk/anomalydetector/azure-ai-anomalydetector/samples/sample_data/request-data.csv
 
+# 5. Follow the instructions to configure App Service with Application Gateway:
+#     https://learn.microsoft.com/en-us/azure/application-gateway/configure-web-app?tabs=customdomain%2Cazure-portal
 
 #--------------------------------------------------------------
 #   Azure Function App
 #--------------------------------------------------------------
 resource "azurerm_windows_function_app" "win_func_app" {
   name                = lower("func-app-${local.full_suffix}")
-  resource_group_name = module.mainregion_poc_rg.name
-  location            = module.mainregion_poc_rg.location
+  resource_group_name = module.poc_rg.name
+  location            = module.poc_rg.location
 
   storage_account_name = azurerm_storage_account.app_svc_st.name
   # storage_account_access_key    = azurerm_storage_account.app_svc_st.primary_access_key
@@ -1410,6 +1494,9 @@ resource "azurerm_windows_function_app" "win_func_app" {
     "SftpUser"    = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.kv.name};SecretName=${azurerm_key_vault_secret.sftpuser_name_secret.name})"
     "SftpPwd"     = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.kv.name};SecretName=${azurerm_key_vault_secret.sftpuser_pwd_secret.name})"
     "SftpHomeDir" = "/${var.sftp_user_name}"
+
+    # Keep some development messages
+    "ASPNETCORE_ENVIRONMENT" = "Development"
   }
 
   sticky_settings {
@@ -1434,6 +1521,42 @@ resource "azurerm_windows_function_app" "win_func_app" {
 
   tags = local.base_tags
 }
+# #   / Private Endpoint for local connections (through App Gateway)
+# module "function_local_pe" {
+#   source     = "../terraform-modules/pe"
+#   depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
+
+#   resource_id = azurerm_windows_function_app.win_func_app.id
+
+#   resource_group_name  = module.poc_rg.name
+#   location             = module.poc_rg.location
+#   subnet_id            = azurerm_subnet.pe_subnet.id
+#   subresource_names    = ["sites"]
+#   is_manual_connection = false
+
+#   privdns_rg_name = module.poc_rg.name
+#   cname_zone      = "azurewebsites.net"
+#   a_zone          = "privatelink.azurewebsites.net"
+#   ttl             = 10
+
+#   tags = local.base_tags
+# }
+# #   / Private DNS entry for SCM for local connections (Publish from VS/CD Pipeline)
+# module "function_scm_local_privdns" {
+#   source = "../terraform-modules/pe-dns"
+
+#   record_name        = "${azurerm_windows_function_app.win_func_app.name}.scm"
+#   private_ip_address = module.function_local_pe.private_ip_address
+
+#   privdns_rg_name = module.poc_rg.name
+#   cname_zone      = "azurewebsites.net"
+#   a_zone          = "privatelink.azurewebsites.net"
+#   ttl             = 10
+
+#   tags = local.base_tags
+# }
+
+#   / Private Endpoint for External incoming connections (to launch http triggers ?)
 module "function_external_pe" {
   providers = { azurerm = azurerm.external }
   source    = "../terraform-modules/pe"
@@ -1453,6 +1576,7 @@ module "function_external_pe" {
 
   tags = local.base_tags
 }
+#   / Private DNS entry for SCM for External incoming connections (Publish from VS/CD Pipeline)
 module "function_scm_external_privdns" {
   source    = "../terraform-modules/pe-dns"
   providers = { azurerm = azurerm.external }
