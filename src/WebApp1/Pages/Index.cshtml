@@ -44,9 +44,14 @@
     </div>
 </div>
 <div class="row mb-auto">
-    <h3 class="display-6">Client IP: @Model.RemoteIp, Scheme: @Model.Scheme,</h3>
-    <h3 class="display-6">Host header: @Model.HostHeader,</h3>
-    <h3 class="display-6">X-Forwarded-For: @Model.XForwardedFor,</h3>
-    <h3 class="display-6">X-Coming-From: @Model.XComingFrom,</h3>
-    <h3 class="display-6">Server IP: @Model.LocalIp, Host: @Model.Host.</h3>
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+    <div class="row mb-auto">
+        <p>Client IP: @Model.RemoteIp, Scheme: @Model.Scheme,</p>
+        <p>Host header: @Model.HostHeader,</p>
+        <p>X-Forwarded-For: @Model.XForwardedFor,</p>
+@*         <p>X-Coming-From: @Model.XComingFrom,</p>
+ *@        <p>Server IP: @Model.LocalIp, Host: @Model.Host.</p>
+    </div>
+    }
 </div>
