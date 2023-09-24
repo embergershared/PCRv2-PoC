@@ -11,7 +11,9 @@
                 <p class="card-text">
                     PCR2 PoC is a sample application that
                     demonstrates how to use Entity Framework Core in an
-                    ASP.NET Core Razor Pages web app.
+                    ASP.NET Core Razor Pages web app and an Azure Function App.
+                    Users access (through internal network & public internet) is done through a locked down Application Gateway.
+                    Function Apps function access the internet through VNet integration with a NAT Gateway (so the Public IP is known and constant for IP filtering).
                 </p>
             </div>
         </div>
@@ -40,6 +42,8 @@
             </div>
         </div>
     </div>
+</div>
+<div class="row mb-auto">
     <h3 class="display-6">Client IP: @Model.RemoteIp, Scheme: @Model.Scheme,</h3>
     <h3 class="display-6">Host header: @Model.HostHeader,</h3>
     <h3 class="display-6">X-Forwarded-For: @Model.XForwardedFor,</h3>

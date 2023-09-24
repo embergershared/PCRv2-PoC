@@ -11,12 +11,24 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Authorization;
 using WebApp1.Data;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
+using Microsoft.IdentityModel.Tokens;
 
 
 // Ref: https://learn.microsoft.com/en-us/aspnet/core/data/ef-rp/intro?view=aspnetcore-7.0&tabs=visual-studio#create-the-web-app-project
 
 var builder = WebApplication.CreateBuilder(args);
+var hasDBConnectivity = false;
 
+// Create a logger specifically for Program.cs
+using var loggerFactory = LoggerFactory.Create(builder =>
+{
+    builder.AddSimpleConsole(i => i.ColorBehavior = LoggerColorBehavior.Disabled);
+});
+
+var logger = loggerFactory.CreateLogger<Program>();
+
+// Add logging to the WebApplication
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
@@ -36,10 +48,26 @@ builder.Services.AddRazorPages().AddMvcOptions(options =>
     options.Filters.Add(new AuthorizeFilter(policy));
 }).AddMicrosoftIdentityUI();
 
-builder.Services.AddDbContext<WebApp1EfDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("WebApp1EfDbContext-MI")
-                         ?? throw new InvalidOperationException("Connection String 'WebApp1EfDbContext-MI' not found."))
-);
+try
+{
+    var connectionString = builder.Configuration.GetConnectionString("WebApp1EfDbContext-MI");
+    if (connectionString.IsNullOrEmpty())
+    {
+       logger.LogError("Program.cs: Connection String 'WebApp1EfDbContext-MI' not found.");
+       hasDBConnectivity = false;
+    }
+    else
+    {
+        builder.Services.AddDbContext<WebApp1EfDbContext>(options =>
+            options.UseSqlServer(connectionString));
+        hasDBConnectivity = true;
+    }
+}
+catch (Exception e)
+{
+    logger.LogError(message: $"Program.cs: Unable to create Entity Framework DB context: {e}");
+    hasDBConnectivity = false;
+}
 
 // Database exception filter
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
@@ -71,14 +99,21 @@ else
 }
 
 // Create database if not existing
-app.Logger.LogInformation("Program.cs: Initialize Database with EF");
-using (var scope = app.Services.CreateScope())
+if (hasDBConnectivity)
 {
-    var services = scope.ServiceProvider;
+    app.Logger.LogInformation("Program.cs: Initialize Database with EF");
+    using (var scope = app.Services.CreateScope())
+    {
+        var services = scope.ServiceProvider;
 
-    var context = services.GetRequiredService<WebApp1EfDbContext>();
-    //context.Database.EnsureCreated();
-    //DbInitializer.Initialize(context);
+        var context = services.GetRequiredService<WebApp1EfDbContext>();
+        //context.Database.EnsureCreated();
+        //DbInitializer.Initialize(context);
+    }
+}
+else
+{
+    app.Logger.LogWarning("Program.cs: Initialize Database with EF");
 }
 
 app.UseHttpsRedirection();
