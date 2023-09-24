@@ -44,6 +44,9 @@ builder.Services.AddDbContext<WebApp1EfDbContext>(options =>
 // Database exception filter
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
+// Get access to HttpContext
+builder.Services.AddHttpContextAccessor();
+
 //   ===============   BUILDING THE APPLICATION   ===============
 var app = builder.Build();
 app.Logger.LogInformation("Program.cs: builder.Build() invoked");
@@ -51,6 +54,8 @@ app.Logger.LogInformation("Program.cs: builder.Build() invoked");
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Comes from NuGet Microsoft.AspNetCore.HttpOverrides
+app.UseForwardedHeaders();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
