@@ -485,7 +485,7 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
     cookie_based_affinity               = "Disabled"
     pick_host_name_from_backend_address = false
     port                                = 443
-    probe_name                          = "health-probe-https-ebdemosnet"
+    probe_name                          = "health-probe-https-publicdomain"
     protocol                            = "Https"
     request_timeout                     = 20
     trusted_root_certificate_names      = []
@@ -551,8 +551,8 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
   }
 
   probe {
-    name                                      = "health-probe-https-ebdemosnet"
-    host                                      = "pcr2-poc.ebdemos.net"
+    name                                      = "health-probe-https-publicdomain"
+    host                                      = var.external_url
     interval                                  = 30
     minimum_servers                           = 0
     path                                      = "/"
@@ -613,21 +613,21 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
 }
 #   / Create Private DNS Zone and Endpoint for internal users from Hub
 /*
-resource "azurerm_private_dns_zone" "ebdemos" {
+resource "azurerm_private_dns_zone" "public_domain" {
   provider = azurerm.external
 
   name                = local.external_url_domain
   resource_group_name = data.azurerm_virtual_network.external_vnet.resource_group_name
   tags                = local.base_tags
 }
-resource "azurerm_private_dns_zone_virtual_network_link" "ebdemos_link" {
+resource "azurerm_private_dns_zone_virtual_network_link" "public_domain_link" {
   provider = azurerm.external
 
-  depends_on = [azurerm_private_dns_zone.ebdemos]
+  depends_on = [azurerm_private_dns_zone.public_domain]
 
-  name                  = "${azurerm_private_dns_zone.ebdemos.name}-to-${replace(data.azurerm_virtual_network.external_vnet.name, "-", "_")}-link"
+  name                  = "${azurerm_private_dns_zone.public_domain.name}-to-${replace(data.azurerm_virtual_network.external_vnet.name, "-", "_")}-link"
   resource_group_name   = data.azurerm_virtual_network.external_vnet.resource_group_name
-  private_dns_zone_name = azurerm_private_dns_zone.ebdemos.name
+  private_dns_zone_name = azurerm_private_dns_zone.public_domain.name
   virtual_network_id    = data.azurerm_virtual_network.external_vnet.id
   registration_enabled  = false
   tags                  = local.base_tags
@@ -655,8 +655,8 @@ resource "azurerm_private_dns_a_record" "external_url_a_record" {
   provider = azurerm.external
 
   name                = local.external_url_prefix
-  zone_name           = azurerm_private_dns_zone.ebdemos.name
-  resource_group_name = azurerm_private_dns_zone.ebdemos.resource_group_name
+  zone_name           = azurerm_private_dns_zone.public_domain.name
+  resource_group_name = azurerm_private_dns_zone.public_domain.resource_group_name
   ttl                 = 10
   records             = ["${module.appgw_external_pe.private_ip_address}"]
   tags                = local.base_tags
