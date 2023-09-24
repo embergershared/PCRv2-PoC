@@ -56,7 +56,7 @@ locals {
   add_name                    = "poc"
   full_suffix                 = "${var.main_region_code}-${var.subsc_nickname}-${local.base_name}-${local.add_name}"
   pcr2_vnet_space             = "192.168.23.0/24"
-  appgw_vnet_space            = "192.168.25.0/24"
+  appgw_vnet_space            = "192.168.24.0/24"
   private_dns_zones           = toset(["blob.core.windows.net", "privatelink.blob.core.windows.net", "file.core.windows.net", "privatelink.file.core.windows.net", "vault.azure.net", "vaultcore.azure.net", "database.windows.net", "privatelink.database.windows.net", "cognitiveservices.azure.com", "azurewebsites.net", "privatelink.azurewebsites.net"])
   external_subscription_id    = split("/", var.external_snet_pe_id)[2]
   external_url_prefix         = split(".", var.external_url)[0]
@@ -309,7 +309,7 @@ module "kv_local_pe" {
 #--------------------------------------------------------------
 #   / Public IP for App Gateway
 resource "azurerm_public_ip" "appgw_pip" {
-  name                = lower("pip-for-appgw-waf-${local.full_suffix}")
+  name                = lower("pip-for-appgw-${local.full_suffix}")
   location            = module.poc_rg.location
   resource_group_name = module.poc_rg.name
   allocation_method   = "Static"
@@ -318,7 +318,7 @@ resource "azurerm_public_ip" "appgw_pip" {
 }
 #   / Application Gateway VNet
 resource "azurerm_virtual_network" "appgw_vnet" {
-  name                = lower("vnet-for-appgw-waf-${local.full_suffix}")
+  name                = lower("vnet-for-appgw-${local.full_suffix}")
   resource_group_name = module.poc_rg.name
   location            = module.poc_rg.location
   address_space       = [local.appgw_vnet_space]
@@ -402,19 +402,9 @@ resource "azurerm_virtual_network_peering" "pcr2_to_appgw_vnet" {
   allow_gateway_transit        = false
   use_remote_gateways          = false
 }
-# #   / Locals for naming conventions
-# locals {
-#   backend_address_pool_name      = "be-app-pool"
-#   frontend_port_name             = "fe-port"
-#   frontend_ip_configuration_name = "fe-ip"
-#   http_setting_name              = "be-htst"
-#   listener_name                  = "fe-lstn"
-#   request_routing_rule_name      = "rq-rt-rule"
-#   redirect_configuration_name    = "rdr-cfg"
-# }
 # #   / User Assigned Identity to be used by the App Gateway
 # resource "azurerm_user_assigned_identity" "appgw_uai" {
-#   name                = lower("msi-appgw-waf-${local.full_suffix}")
+#   name                = lower("msi-appgw-${local.full_suffix}")
 #   location            = module.poc_rg.location
 #   resource_group_name = module.poc_rg.name
 # }
@@ -439,7 +429,7 @@ resource "azurerm_key_vault_certificate" "tls_cert" {
   # To go through the setup and use the PowerShell script in /data/AppGw-HttpsCert-from-KV.ps1
 }
 resource "azurerm_web_application_firewall_policy" "appgw_waf" {
-  name                = lower("waf-policy-for-appgw-waf-${local.full_suffix}")
+  name                = lower("waf-policy-for-appgw-${local.full_suffix}")
   location            = module.poc_rg.location
   resource_group_name = module.poc_rg.name
 
@@ -459,7 +449,7 @@ resource "azurerm_web_application_firewall_policy" "appgw_waf" {
   }
 }
 resource "azurerm_application_gateway" "appgw_pcr2" {
-  name                = lower("appgw-waf-${local.full_suffix}")
+  name                = lower("appgw-${local.full_suffix}")
   location            = module.poc_rg.location
   resource_group_name = module.poc_rg.name
 
@@ -468,17 +458,27 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
 
   autoscale_configuration {
     max_capacity = 10
-    min_capacity = 0
+    min_capacity = 2
   }
 
   backend_address_pool {
-    name = "backend-pool-app-svc"
+    name = "backend-pool-appsvc"
     fqdns = [
       azurerm_windows_web_app.poc_app_svc.default_hostname
     ]
     ip_addresses = []
   }
 
+  backend_http_settings {
+    name                                = "backend-settings-http"
+    affinity_cookie_name                = "ApplicationGatewayAffinity"
+    cookie_based_affinity               = "Disabled"
+    pick_host_name_from_backend_address = false
+    port                                = 80
+    protocol                            = "Http"
+    request_timeout                     = 20
+    trusted_root_certificate_names      = []
+  }
   backend_http_settings {
     name                                = "backend-settings-https"
     affinity_cookie_name                = "ApplicationGatewayAffinity"
@@ -498,7 +498,7 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
   frontend_ip_configuration {
     name                            = "appGwPrivateFrontendIpIPv4"
     private_ip_address_allocation   = "Static"
-    private_ip_address              = "192.168.25.10"
+    private_ip_address              = "192.168.24.10"
     private_link_configuration_name = "private-link-config-private"
     subnet_id                       = azurerm_subnet.appgw_subnet.id
   }
@@ -513,13 +513,30 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
   }
 
   http_listener {
-    name                           = "listener-https-private"
+    name                           = "listener-private-https"
     frontend_ip_configuration_name = "appGwPrivateFrontendIpIPv4"
     frontend_port_name             = "port_443"
     host_names                     = []
     protocol                       = "Https"
     require_sni                    = false
     ssl_certificate_name           = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
+  }
+  http_listener {
+    name                           = "listener-public-https"
+    frontend_ip_configuration_name = "appGwPublicFrontendIpIPv4"
+    frontend_port_name             = "port_443"
+    host_names                     = []
+    protocol                       = "Https"
+    require_sni                    = false
+    ssl_certificate_name           = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
+  }
+  http_listener {
+    name                           = "listener-public-http"
+    frontend_ip_configuration_name = "appGwPublicFrontendIpIPv4"
+    frontend_port_name             = "port_80"
+    host_names                     = []
+    protocol                       = "Http"
+    require_sni                    = false
   }
 
   private_link_configuration {
@@ -529,7 +546,7 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
       name                          = "privateLinkIpConfig1"
       primary                       = false
       private_ip_address_allocation = "Dynamic"
-      subnet_id                     = azurerm_subnet.appgw_privlink_subnet.id # "/subscriptions/34144584-4817-47a0-a912-bd00bae76495/resourceGroups/rg-use2-s4-pcr2-poc/providers/Microsoft.Network/virtualNetworks/vnet-for-appgw-waf-use2-s4-pcr2-poc/subnets/snet-appgw-priv-link"
+      subnet_id                     = azurerm_subnet.appgw_privlink_subnet.id
     }
   }
 
@@ -552,11 +569,27 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
   }
 
   request_routing_rule {
-    name                       = "routing-rule-https-ebdemosnet"
-    backend_address_pool_name  = "backend-pool-app-svc"
-    backend_http_settings_name = "backend-settings-https"
-    http_listener_name         = "listener-https-private"
+    name                       = "routing-rule"
+    backend_address_pool_name  = "backend-pool-appsvc"
+    backend_http_settings_name = "backend-settings-http"
+    http_listener_name         = "listener-public-http"
     priority                   = 500
+    rule_type                  = "Basic"
+  }
+  request_routing_rule {
+    name                       = "routing-rule-https-private"
+    backend_address_pool_name  = "backend-pool-appsvc"
+    backend_http_settings_name = "backend-settings-https"
+    http_listener_name         = "listener-private-https"
+    priority                   = 400
+    rule_type                  = "Basic"
+  }
+  request_routing_rule {
+    name                       = "routing-rule-https-public"
+    backend_address_pool_name  = "backend-pool-appsvc"
+    backend_http_settings_name = "backend-settings-https"
+    http_listener_name         = "listener-public-https"
+    priority                   = 600
     rule_type                  = "Basic"
   }
 
@@ -565,27 +598,11 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
     subnet_id = azurerm_subnet.appgw_subnet.id
   }
 
-  # identity {
-  #   identity_ids = [
-  #     azurerm_user_assigned_identity.appgw_uai.id,
-  #   ]
-  #   type = "UserAssigned"
-  # }
-
   sku {
     name     = "WAF_v2"
     tier     = "WAF_v2"
     capacity = 0
   }
-
-  # ssl_certificate {
-  #   # After days of testing, Key vault integration with a Private Endpoint + RBAC only Key vault doesn't work
-  #   # Keeping this code for future refence, when App Gateway will get working feature
-  #   name                = azurerm_key_vault_certificate.tls_cert.name
-  #   key_vault_secret_id = "https://kv-use2-s4-${local.full_suffix}.vault.azure.net:443/secrets/${azurerm_key_vault_certificate.tls_cert.name}/"
-  #   # IMPORTANT: The Key vault is RBAC enabled, so the certificate must be imported in App Gateway through scipt (doesn't work with portal)
-  #   # As per: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs?WT.mc_id=Portal-Microsoft_Azure_HybridNetworking#key-vault-azure-role-based-access-control-permission-model
-  # }
 
   ssl_certificate {
     name     = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
