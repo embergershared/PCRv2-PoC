@@ -29,7 +29,6 @@ var logger = loggerFactory.CreateLogger<Program>();
 // Properties
 var hasDbConnectivity = false;
 
-
 #region   ===============   CREATING THE APP BUILDER   ===============
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +42,7 @@ builder.Services.AddMicrosoftIdentityWebAppAuthentication(builder.Configuration,
     .EnableTokenAcquisitionToCallDownstreamApi(initialScopes)
     .AddDownstreamWebApi("DownstreamApi", builder.Configuration.GetSection("DownstreamApi"))
     .AddInMemoryTokenCaches();
+    // Consider caching the token to scale: https://aka.ms/msal-net-cca-token-cache-serialization
 
 // Add Razor Pages, MVC controller and Microsoft Identity UI
 builder.Services

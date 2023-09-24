@@ -35,7 +35,7 @@ namespace WebApp1.Pages
             Host = HttpContext.Request.Host.ToString();
 
             XForwardedFor = Request.Headers["X-Forwarded-For"].ToString();
-            XComingFrom = Request.Headers["X-Coming-From"].ToString();
+            //XComingFrom = Request.Headers["X-Coming-From"].ToString();
 
             _logger.LogInformation("IndexModel.cshtml.cs: OnGet() finished");
         }
