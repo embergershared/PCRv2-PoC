@@ -65,9 +65,7 @@ locals {
 }
 #   / Main region Resource Group
 module "poc_rg" {
-  # Terraform Cloud/Enterprise use
-  source  = "app.terraform.io/embergertf/resourcegroup/azurerm"
-  version = "~>1.3.3"
+  source = "../terraform-modules/rg"
 
   region_code     = var.main_region_code
   subsc_code      = var.subsc_nickname
@@ -448,7 +446,7 @@ resource "azurerm_web_application_firewall_policy" "appgw_waf" {
     }
   }
 }
-resource "azurerm_application_gateway" "appgw_pcr2" {
+resource "azurerm_application_gateway" "appgw" {
   name                = lower("appgw-${local.full_suffix}")
   location            = module.poc_rg.location
   resource_group_name = module.poc_rg.name
@@ -612,7 +610,6 @@ resource "azurerm_application_gateway" "appgw_pcr2" {
   }
 }
 #   / Create Private DNS Zone and Endpoint for internal users from Hub
-/*
 resource "azurerm_private_dns_zone" "public_domain" {
   provider = azurerm.external
 
@@ -661,7 +658,6 @@ resource "azurerm_private_dns_a_record" "external_url_a_record" {
   records             = ["${module.appgw_external_pe.private_ip_address}"]
   tags                = local.base_tags
 }
-#*/
 
 #--------------------------------------------------------------
 #   Storage Accounts
@@ -1510,7 +1506,7 @@ resource "azurerm_windows_function_app" "win_func_app" {
     "AzureWebJobs.InputFilesProcessor.Disabled" = "1"
     "AzureWebJobs.WhatIsMyIP.Disabled"          = "1"
     "AzureWebJobs.QueryDatabase.Disabled"       = "1"
-    "AzureWebJobs.SftpClient.Disabled"          = "0"
+    "AzureWebJobs.SftpClient.Disabled"          = "1"
 
     # SFTP access
     # Secret pulled from Key vault directly. Ref: https://learn.microsoft.com/en-us/azure/app-service/app-service-key-vault-references?tabs=azure-cli
