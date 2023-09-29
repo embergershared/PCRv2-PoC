@@ -10,15 +10,15 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace FunctionApp1
 {
-    public class StartUp : FunctionsStartup
+  public class StartUp : FunctionsStartup
+  {
+    public override void Configure(IFunctionsHostBuilder builder)
     {
-        public override void Configure(IFunctionsHostBuilder builder)
-        {
-            var connectionString = Environment.GetEnvironmentVariable("FuncApp1EfDbContext-AS") ??
-                                   throw new InvalidOperationException("Startup(): Connection String 'FuncApp1EfDbContext-AS' not found.");
+      var connectionString = Environment.GetEnvironmentVariable("FuncApp1EfDbContext-AS") ??
+                              throw new InvalidOperationException("Startup(): Connection String 'FuncApp1EfDbContext-AS' not found.");
 
-            builder.Services.AddDbContext<FuncApp1EfDbContext>(
-                options => options.UseSqlServer(connectionString));
-        }
+      builder.Services.AddDbContext<FuncApp1EfDbContext>(
+          options => options.UseSqlServer(connectionString));
     }
+  }
 }
