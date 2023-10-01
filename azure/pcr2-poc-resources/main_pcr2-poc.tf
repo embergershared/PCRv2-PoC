@@ -57,7 +57,7 @@ locals {
   full_suffix                 = "${var.main_region_code}-${var.subsc_nickname}-${local.base_name}-${local.add_name}"
   pcr2_vnet_space             = "192.168.23.0/24"
   appgw_vnet_space            = "192.168.24.0/24"
-  private_dns_zones           = toset(["blob.core.windows.net", "privatelink.blob.core.windows.net", "file.core.windows.net", "privatelink.file.core.windows.net", "vault.azure.net", "vaultcore.azure.net", "database.windows.net", "privatelink.database.windows.net", "cognitiveservices.azure.com", "azurewebsites.net", "privatelink.azurewebsites.net"])
+  private_dns_zones           = toset(["privatelink.blob.core.windows.net", "privatelink.file.core.windows.net", "privatelink.vaultcore.azure.net", "privatelink.database.windows.net", "privatelink.cognitiveservices.azure.com", "privatelink.azurewebsites.net"])
   external_subscription_id    = split("/", var.external_snet_pe_id)[2]
   external_url_prefix         = split(".", var.external_url)[0]
   external_url_prefix_trimmed = replace(local.external_url_prefix, "-", "")
@@ -274,8 +274,7 @@ module "kv_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "vault.azure.net"
-  a_zone          = "vaultcore.azure.net"
+  a_zone          = "privatelink.vaultcore.azure.net"
   ttl             = 10
 
   tags = local.base_tags
@@ -712,7 +711,6 @@ module "drop_st_local_pe" {
   is_manual_connection = false
 
   privdns_rg_name = module.poc_rg.name
-  cname_zone      = "blob.core.windows.net"
   a_zone          = "privatelink.blob.core.windows.net"
   ttl             = 10
 
@@ -731,7 +729,6 @@ module "drop_st_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "blob.core.windows.net"
   a_zone          = "privatelink.blob.core.windows.net"
   ttl             = 10
 
@@ -792,7 +789,6 @@ module "archive_st_local_pe" {
   is_manual_connection = false
 
   privdns_rg_name = module.poc_rg.name
-  cname_zone      = "blob.core.windows.net"
   a_zone          = "privatelink.blob.core.windows.net"
   ttl             = 10
 
@@ -811,7 +807,6 @@ module "archive_st_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "blob.core.windows.net"
   a_zone          = "privatelink.blob.core.windows.net"
   ttl             = 10
 
@@ -868,7 +863,6 @@ module "app_svc_st_local_pe" {
   is_manual_connection = false
 
   privdns_rg_name = module.poc_rg.name
-  cname_zone      = "blob.core.windows.net"
   a_zone          = "privatelink.blob.core.windows.net"
   ttl             = 10
 
@@ -887,7 +881,6 @@ module "app_svc_st_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "blob.core.windows.net"
   a_zone          = "privatelink.blob.core.windows.net"
   ttl             = 10
 
@@ -944,7 +937,6 @@ module "sftp_st_local_pe" {
   is_manual_connection = false
 
   privdns_rg_name = module.poc_rg.name
-  cname_zone      = "blob.core.windows.net"
   a_zone          = "privatelink.blob.core.windows.net"
   ttl             = 10
 
@@ -963,7 +955,6 @@ module "sftp_st_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "blob.core.windows.net"
   a_zone          = "privatelink.blob.core.windows.net"
   ttl             = 10
 
@@ -1017,8 +1008,7 @@ module "anomaly_detector_local_pe" {
   is_manual_connection = false
 
   privdns_rg_name = module.poc_rg.name
-  cname_zone      = null
-  a_zone          = "cognitiveservices.azure.com"
+  a_zone          = "privatelink.cognitiveservices.azure.com"
   ttl             = 10
 
   tags = local.base_tags
@@ -1061,7 +1051,6 @@ module "sqlsvr_local_pe" {
   is_manual_connection = false
 
   privdns_rg_name = module.poc_rg.name
-  cname_zone      = "database.windows.net"
   a_zone          = "privatelink.database.windows.net"
   ttl             = 10
 
@@ -1080,7 +1069,6 @@ module "sqlsvr_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "database.windows.net"
   a_zone          = "privatelink.database.windows.net"
   ttl             = 10
 
@@ -1329,7 +1317,6 @@ module "appsvc_local_pe" {
   is_manual_connection = false
 
   privdns_rg_name = module.poc_rg.name
-  cname_zone      = "azurewebsites.net"
   a_zone          = "privatelink.azurewebsites.net"
   ttl             = 10
 
@@ -1343,7 +1330,6 @@ module "appsvc_scm_local_privdns" {
   private_ip_address = module.appsvc_local_pe.private_ip_address
 
   privdns_rg_name = module.poc_rg.name
-  cname_zone      = "azurewebsites.net"
   a_zone          = "privatelink.azurewebsites.net"
   ttl             = 10
 
@@ -1378,7 +1364,6 @@ module "appsvc_scm_external_privdns" {
   record_name        = "${azurerm_windows_web_app.poc_app_svc.name}.scm"
   private_ip_address = module.appsvc_external_pe.private_ip_address
   privdns_rg_name    = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone         = "azurewebsites.net"
   a_zone             = "privatelink.azurewebsites.net"
   ttl                = 10
 
@@ -1439,6 +1424,7 @@ resource "azurerm_windows_function_app" "win_func_app" {
   location            = module.poc_rg.location
 
   storage_account_name = azurerm_storage_account.app_svc_st.name
+  # There is a bug in azurerm provider that conflicts storage_account_access_key & storage_uses_managed_identity = true, so commenting the key
   # storage_account_access_key    = azurerm_storage_account.app_svc_st.primary_access_key
   storage_uses_managed_identity = true
   service_plan_id               = azurerm_service_plan.poc_app_svc_plan.id
@@ -1590,7 +1576,6 @@ module "function_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "azurewebsites.net"
   a_zone          = "privatelink.azurewebsites.net"
   ttl             = 10
 
@@ -1605,7 +1590,6 @@ module "function_scm_external_privdns" {
   private_ip_address = module.function_external_pe.private_ip_address
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "azurewebsites.net"
   a_zone          = "privatelink.azurewebsites.net"
   ttl             = 10
 
