@@ -67,7 +67,7 @@ The repository contains:
     tls_cert_pwd  = "" # <= The password to open the PFX file
     ```
 
-  - `azure/terraform-modules/`: is the folder with multiple re-used terraform modules by the main_pcr2-poc.tf file
+  - `azure/terraform-modules/`: is the folder with multiple re-used terraform modules by the `main_pcr2-poc.tf` file
 
     The modules are:
     - `base/`: this module enforces naming conventions for the resources,
@@ -77,7 +77,33 @@ The repository contains:
 
 - a `src/` folder with:
 
+  - `src/WebApp1/`:
+
+    A Web Application with the following characteristics:
+    - `.NET core 6.0 LTS`,
+    - `no containers`,
+    - `Razor Pages`,
+    - `EntityFrameworkCore`,
+    - `EntityFrameworkCore.SqlServer`,
+    - `Microsoft.Identity.Web`,
+    - `Azure.AI.AnomalyDetector`,
+    - `Azure.Storage.Blobs`.
+
+    It demonstrates the following technical patterns:
+    - Azure `Storage Account Blobs/Containers` access and data manipulation through `Private endpoints` and `Managed Identity`,
+    - `EntityFrameworkCore` access to `Azure SQL Server and database` through `Private endpoints` and `Managed Identity`,
+    - Changing User Interface based on:
+      - Database access availability,
+      - Authenticated user or not (at logout),
+    - Integration with `Application Service Authentication` provider to:
+      - Allow access only to `Azure AD/Entra ID` authenticated users,
+      - Gather User token from `token store`,
+    - Use of `Azure AI Anomaly Detector` from `Razor pages` using `.NET core` code,
+    - `Publish` from `Visual Studio 2022` to the `Windows Web App` through `Private endpoints` with both `Web` and `Zip` deploy profiles.
+
+
+
+
   - `src/FunctionApp1/`:
 
 
-  - `src/WebApp1/`:
