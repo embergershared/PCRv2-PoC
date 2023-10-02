@@ -67,6 +67,12 @@ The repository contains:
     tls_cert_pwd  = "" # <= The password to open the PFX file
     ```
 
+    > Important Note:
+    > - The terraform plan is in 1 entire file, but can't be deployed in 1 run.
+    > - There are some manual steps required before some resources can be deployed.
+    > - It is suggested to comment all sections after a set of resources, deploy, then uncomment more resources, deploy, etc.
+    > - The in-code notes/comments will help this process.
+
   - `azure/terraform-modules/`: is the folder with multiple re-used terraform modules by the `main_pcr2-poc.tf` file
 
     The modules are:
