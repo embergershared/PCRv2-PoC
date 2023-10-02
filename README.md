@@ -38,6 +38,8 @@ Notes:
 
 The repository contains:
 
+### Terraform code to deploy Azure resources
+
 - an `azure/` folder with all the `terraform` files required to deploy the Azure resources/infrastructure:
 
   - `azure/pcr2-poc-resources/`: is the folder with the variables and main files for terraform. To run the terraform, a `<values whatever name>.auto.tfvars` file is required with the values set for these variables:
@@ -80,6 +82,8 @@ The repository contains:
     - `rg/`: Creates a Resource Group,
     - `pe/`: Creates 1 Private Endpoint,
     - `pe-dns/`: Creates eventual CNAME and A records for the Private Endpoints.
+
+### .NET core solution with 2 projects
 
 - a `src/` folder with:
 
@@ -145,3 +149,24 @@ The repository contains:
     - `SftpClient`:
       - Demonstrates how to use WinSCP SFTP NuGet package to connect to and query a SFTP server on the Public Internet,
       - It connects, list the files in the home directory and outputs some of their properties in the log.
+
+## Architectural notes
+
+There are few considerations to understand in this architecture:
+
+1. The Island is completely independent to/from any other networks,
+
+2. 2 VNets are used:
+    1. one for the Application Service, Function App and Private endpoints,
+    2. one dedicated to the Application Gateway,
+
+    This is because the deployment of the Application Gateway on the App Service VNet was almost always ending with a `Failed` Application Gateway.
+    With a dedicated VNet, control on the Application Gateway deployment is gained, and it can be used as a commodity (replaced, disconnected).
+
+    The VNet peering between the 2 VNets configuration is:
+    - Application Gateway VNet => Application Service VNet: only `"Allow access to remote virtual network"`,
+    - Application Service VNet => Application Gateway VNet: `"Allow access to remote virtual network"` + `"Allow traffic to remote virtual network"`.
+
+3. The connectivity to `Log Analytics Workspace` and `Application Insights` is done within the Azure network, but not through Private endpoints / Private Link. This can be done with [Azure Monitor Private Link Service (AMPLS)](https://learn.microsoft.com/en-us/samples/azure-samples/azure-monitor-private-link-scope/azure-monitor-private-link-scope/), which is not in this scope,
+
+4. The `AI Cognitive Services Anomaly Detector` is connected through a Private endpoint.
