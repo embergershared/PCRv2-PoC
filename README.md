@@ -147,7 +147,7 @@ The repository contains:
       - In that function, the database is accessed via `Managed Identity`, queried for its `Students` entities, then outputs to the log the students' names.
 
     - `SftpClient`:
-      - Demonstrates how to use WinSCP SFTP NuGet package to connect to and query a SFTP server on the Public Internet,
+      - Demonstrates how to use `WinSCP SFTP NuGet` package to connect to and query a SFTP server on the Public Internet,
       - It connects, list the files in the home directory and outputs some of their properties in the log.
 
 ## Architectural notes
