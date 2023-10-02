@@ -92,7 +92,7 @@ namespace FunctionApp1
                                   "Environment Variable 'ArchiveStorageAccountName' not found.");
       var archiveContainerName = Environment.GetEnvironmentVariable("ArchiveContainerName") ??
                               throw new InvalidOperationException(
-                                     "Environment Variable 'ArchiveContainerName' not found.");
+                                  "Environment Variable 'ArchiveContainerName' not found.");
 
       // Get a client to access the container in the storage account
       var archiveBlobContainerClient = GetBlobContainerClient(log, archiveStName, archiveContainerName);
@@ -107,15 +107,9 @@ namespace FunctionApp1
 
       Output.Log(log, $"Upload result is: {uploadResponse.GetRawResponse().ReasonPhrase}");
 
-      // Push the file to Bank X SFTP
-
-
       // Log processing details
 
-
       // Delete the files processed in Drop
-
-
 
       Output.Log(log, $"C# Timer triggered function \"InputFilesProcessor\" FINISHED at: {DateTime.Now}");
     }

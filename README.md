@@ -103,7 +103,8 @@ The repository contains:
       - Database access availability,
       - Authenticated user or not (at logout),
     - Integration with `Application Service Authentication` provider to:
-      - Allow access only to `Azure AD/Entra ID` authenticated users,
+      - Allow access only to authenticated users with `Azure AD/Entra ID`,
+      - Login is possible with on-premises credentials when on-premises link is down (requires Microsoft Entra Connect with [password hash synchronization](https://learn.microsoft.com/en-us/azure/active-directory/hybrid/connect/whatis-phs),
       - Gather User token from `token store`,
     - Use of `Azure AI Anomaly Detector` from `Razor pages` using `.NET core` code to detect data anomalies (`Univariate` option),
     - `Publish` from `Visual Studio 2022` to the `Windows Web App` through `Private endpoints` with both `Web` and `Zip` deploy profiles.
@@ -113,6 +114,7 @@ The repository contains:
     A Windows Function App with the following characteristics:
     - `.NET core 6.0 LTS`,
     - `no containers`,
+    - All functions are `TimerTrigger` based,
     - `Microsoft.Data.SqlClient`,
     - `EntityFrameworkCore`,
     - `EntityFrameworkCore.SqlServer`,
@@ -122,12 +124,24 @@ The repository contains:
 
     Providing the following `Functions` demonstrating:
     - `WhatIsMyIP`:
-      - This function uses a `httpClient` to query a service to get its Public Internet Address,
-      - It logs the result and allows to check that all calls to Public Internet are done through the Azure `NAT Gateway` attached to the `App Service Integration VNet`,
+      - This function uses an `httpClient` to query a service to get its Public Internet Address,
+      - It logs the result which allows to check that all calls to the Public Internet from the `Function App` and the `Windows Web App` are done through the Azure `NAT Gateway` attached to the `App Service Integration VNet`,
 
     - `InputFilesProcessor`:
+      - This function connects to a `Storage Account`, automatically leveraging the Function App `System Identity` and its assigned `RBAC role` on the storage account,
+      - The `.NET` object manipulation is done with a `BlobContainerClient` then a `BlobItemClient`,
+      - It reads the blob as a `binary` and process its content through a `MemStream()`,
+      - From the data received, a new `blob item` is generated then stored in another `Storage Account`,also accessed through `Managed Identity`,
+      - The code uses a `Stream` object to demonstrate a wide scenario. In code is the reference to deal with `TXT` files.
+      - The `input => processing => output` of content is fully done in memory. No access to the [`Physical File Provider`](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/file-providers?view=aspnetcore-6.0) trough `System.IO.File` is done.
 
     - `QueryDatabase`:
+      - Demonstrates the Dependency Injection of an `EntityFrameworkCore DbContext` in a Function App,
+      - It requires the `Startup.cs` class, that overrides the `FunctionStartup` default,
+      - It gives access to the `DbContext` in the function class,
+      - The "Default" integration between `Function App` and `SQL Server` is done through `inbound` and `output` bindings. These bindings are designed to respectively react to a SQL Server event (inbound) or store data to SQL Server, like creating a new row (outbound). The code provided here demonstrates how to manipulate the entire Database, like querying entities,
+      - In that function, the database is accessed via `Managed Identity`, queried for its `Students` entities, then outputs to the log the students' names.
 
     - `SftpClient`:
-
+      - Demonstrates how to use WinSCP SFTP NuGet package to connect to and query a SFTP server on the Public Internet,
+      - It connects, list the files in the home directory and outputs some of their properties in the log.
