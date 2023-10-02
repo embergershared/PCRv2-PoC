@@ -83,6 +83,7 @@ The repository contains:
     - `.NET core 6.0 LTS`,
     - `no containers`,
     - `Razor Pages`,
+    - `Microsoft.Data.SqlClient`,
     - `EntityFrameworkCore`,
     - `EntityFrameworkCore.SqlServer`,
     - `Microsoft.Identity.Web`,
@@ -98,12 +99,29 @@ The repository contains:
     - Integration with `Application Service Authentication` provider to:
       - Allow access only to `Azure AD/Entra ID` authenticated users,
       - Gather User token from `token store`,
-    - Use of `Azure AI Anomaly Detector` from `Razor pages` using `.NET core` code,
+    - Use of `Azure AI Anomaly Detector` from `Razor pages` using `.NET core` code to detect data anomalies (`Univariate` option),
     - `Publish` from `Visual Studio 2022` to the `Windows Web App` through `Private endpoints` with both `Web` and `Zip` deploy profiles.
-
-
-
 
   - `src/FunctionApp1/`:
 
+    A Windows Function App with the following characteristics:
+    - `.NET core 6.0 LTS`,
+    - `no containers`,
+    - `Microsoft.Data.SqlClient`,
+    - `EntityFrameworkCore`,
+    - `EntityFrameworkCore.SqlServer`,
+    - `Azure.Storage.Blobs`,
+    - `Microsoft.NET.Sdk.Functions`,
+    - `WinSCP` (SFTP .NET client).
+
+    Providing the following `Functions` demonstrating:
+    - `WhatIsMyIP`:
+      - This function uses a `httpClient` to query a service to get its Public Internet Address,
+      - It logs the result and allows to check that all calls to Public Internet are done through the Azure `NAT Gateway` attached to the `App Service Integration VNet`,
+
+    - `InputFilesProcessor`:
+
+    - `QueryDatabase`:
+
+    - `SftpClient`:
 
