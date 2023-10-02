@@ -154,9 +154,9 @@ The repository contains:
 
 There are few considerations to understand in this architecture:
 
-1. The "Application island" is completely independent to/from any other networks,
+- The "Application island" is completely independent to/from any other networks,
 
-2. 2 VNets are used:
+- 2 VNets are used:
     1. one for the Application Service, Function App and Private endpoints,
     2. one dedicated to the Application Gateway,
 
@@ -167,6 +167,6 @@ There are few considerations to understand in this architecture:
     - Application Gateway VNet `=>` Application Service VNet: `"Allow access to remote virtual network"`,
     - Application Service VNet `=>` Application Gateway VNet: `"Allow access to remote virtual network"` + `"Allow traffic to remote virtual network"`.
 
-3. The connectivity to `Log Analytics Workspace` and `Application Insights` is done within the Azure network, but not through Private endpoints / Private Link. This can be done with [Azure Monitor Private Link Service (AMPLS)](https://learn.microsoft.com/en-us/samples/azure-samples/azure-monitor-private-link-scope/azure-monitor-private-link-scope/), which is not in this scope,
+- The connectivity to `Log Analytics Workspace` and `Application Insights` is done within the Azure network, but not through Private endpoints / Private Link. This can be done with [Azure Monitor Private Link Service (AMPLS)](https://learn.microsoft.com/en-us/samples/azure-samples/azure-monitor-private-link-scope/azure-monitor-private-link-scope/), which is not in this scope,
 
-4. The `AI Cognitive Services Anomaly Detector` is connected through a Private endpoint.
+- The `AI Cognitive Services Anomaly Detector` is connected through a Private endpoint.
