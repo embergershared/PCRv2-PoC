@@ -154,7 +154,7 @@ The repository contains:
 
 There are few considerations to understand in this architecture:
 
-1. The Island is completely independent to/from any other networks,
+1. The "Application island" is completely independent to/from any other networks,
 
 2. 2 VNets are used:
     1. one for the Application Service, Function App and Private endpoints,
