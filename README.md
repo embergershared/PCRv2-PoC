@@ -164,7 +164,7 @@ There are few considerations to understand in this architecture:
     With a dedicated VNet, control on the Application Gateway deployment is gained, and it can be used as a commodity (replaced, disconnected).
 
     The VNet peering between the 2 VNets configuration is:
-    - Application Gateway VNet `=>` Application Service VNet: only `"Allow access to remote virtual network"`,
+    - Application Gateway VNet `=>` Application Service VNet: `"Allow access to remote virtual network"`,
     - Application Service VNet `=>` Application Gateway VNet: `"Allow access to remote virtual network"` + `"Allow traffic to remote virtual network"`.
 
 3. The connectivity to `Log Analytics Workspace` and `Application Insights` is done within the Azure network, but not through Private endpoints / Private Link. This can be done with [Azure Monitor Private Link Service (AMPLS)](https://learn.microsoft.com/en-us/samples/azure-samples/azure-monitor-private-link-scope/azure-monitor-private-link-scope/), which is not in this scope,
