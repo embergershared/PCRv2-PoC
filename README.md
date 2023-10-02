@@ -29,9 +29,9 @@ Notes:
   - Access to the Web portal via internal network,
   - Access for the external system to drop files to process,
 
-- External Private endpoints in dashed lines are optional and for administrative purposes (they can be created, used, then deleted):
-  - Access to the scm endpoint of the Function App, for app deployments,
-  - Access to the scm endpoint of the Web App, for app deployments,
+- External Private endpoints in dashed lines are optional and for administrative purposes (they can be created, used, and deleted):
+  - Access to the `scm` endpoint of the Function App, for app deployments,
+  - Access to the `scm` endpoint of the Web App, for app deployments,
   - Access to the Azure SQL server management, for management.
 
 ## Repository content
@@ -42,7 +42,7 @@ The repository contains:
 
 - an `azure/` folder with all the `terraform` files required to deploy the Azure resources/infrastructure:
 
-  - `azure/pcr2-poc-resources/`: is the folder with the variables and main files for terraform. To run the terraform, a `<values whatever name>.auto.tfvars` file is required with the values set for these variables:
+  - `azure/pcr2-poc-resources/`: is the folder with the variables and main files for terraform. To run the terraform plan, a `<whatever file name>.auto.tfvars` file is required with this content and values set:
 
     ```
     # Terraform Service Principal
@@ -71,9 +71,9 @@ The repository contains:
 
     > Important Note:
     > - The terraform plan is in 1 entire file, but can't be deployed in 1 run.
-    > - There are some manual steps required before some resources can be deployed.
-    > - It is suggested to comment all sections after a set of resources, deploy, then uncomment more resources, deploy, etc.
-    > - The in-code notes/comments will help this process.
+    > - There are some manual steps required for some resources to successfully deploy.
+    > - It is suggested to comment all sections that are after a set of resources, deploy the set of resources, uncomment sections, deploy, etc.
+    > - The in-code comments help this process.
 
   - `azure/terraform-modules/`: is the folder with multiple re-used terraform modules by the `main_pcr2-poc.tf` file
 
@@ -83,7 +83,7 @@ The repository contains:
     - `pe/`: Creates 1 Private Endpoint,
     - `pe-dns/`: Creates eventual CNAME and A records for the Private Endpoints.
 
-### .NET core solution with 2 projects
+### A .NET core solution with 2 projects
 
 - a `src/` folder with:
 
