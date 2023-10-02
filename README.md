@@ -20,7 +20,7 @@ The main objectives the new architecture supports are:
 
 ## Architecture diagram
 
-[Architecture](img/PCR2_Isolated_AppSvc.png)
+![Architecture](img/PCR2_Isolated_AppSvc.png)
 
 ## Repository content
 
