@@ -462,7 +462,7 @@ resource "azurerm_application_gateway" "appgw" {
   backend_address_pool {
     name = "backend-pool-appsvc"
     fqdns = [
-      azurerm_windows_web_app.poc_app_svc.default_hostname
+      # azurerm_windows_web_app.poc_app_svc.default_hostname
     ]
     ip_addresses = []
   }
