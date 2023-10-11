@@ -359,7 +359,7 @@ resource "azurerm_subnet" "appgw_privlink_subnet" {
 resource "azurerm_private_dns_zone_virtual_network_link" "appgw_link" {
   depends_on = [azurerm_private_dns_zone.this]
 
-  for_each = toset(["azurewebsites.net", "privatelink.azurewebsites.net"])
+  for_each = toset(["privatelink.azurewebsites.net"])
 
   name                  = "Link_to_${azurerm_virtual_network.appgw_vnet.name}"
   resource_group_name   = module.poc_rg.name
@@ -477,17 +477,17 @@ resource "azurerm_application_gateway" "appgw" {
     request_timeout                     = 20
     trusted_root_certificate_names      = []
   }
-  backend_http_settings {
-    name                                = "backend-settings-https"
-    affinity_cookie_name                = "ApplicationGatewayAffinity"
-    cookie_based_affinity               = "Disabled"
-    pick_host_name_from_backend_address = false
-    port                                = 443
-    probe_name                          = "health-probe-https-publicdomain"
-    protocol                            = "Https"
-    request_timeout                     = 20
-    trusted_root_certificate_names      = []
-  }
+  # backend_http_settings {
+  #   name                                = "backend-settings-https"
+  #   affinity_cookie_name                = "ApplicationGatewayAffinity"
+  #   cookie_based_affinity               = "Disabled"
+  #   pick_host_name_from_backend_address = false
+  #   port                                = 443
+  #   probe_name                          = "health-probe-https-publicdomain"
+  #   protocol                            = "Https"
+  #   request_timeout                     = 20
+  #   trusted_root_certificate_names      = []
+  # }
 
   frontend_ip_configuration {
     name                 = "appGwPublicFrontendIpIPv4"
@@ -548,23 +548,23 @@ resource "azurerm_application_gateway" "appgw" {
     }
   }
 
-  probe {
-    name                                      = "health-probe-https-publicdomain"
-    host                                      = var.external_url
-    interval                                  = 30
-    minimum_servers                           = 0
-    path                                      = "/"
-    pick_host_name_from_backend_http_settings = false
-    port                                      = 443
-    protocol                                  = "Https"
-    timeout                                   = 30
-    unhealthy_threshold                       = 3
-    match {
-      status_code = [
-        "401-403",
-      ]
-    }
-  }
+  # probe {
+  #   name                                      = "health-probe-https-publicdomain"
+  #   host                                      = var.external_url
+  #   interval                                  = 30
+  #   minimum_servers                           = 0
+  #   path                                      = "/"
+  #   pick_host_name_from_backend_http_settings = false
+  #   port                                      = 443
+  #   protocol                                  = "Https"
+  #   timeout                                   = 30
+  #   unhealthy_threshold                       = 3
+  #   match {
+  #     status_code = [
+  #       "401-403",
+  #     ]
+  #   }
+  # }
 
   request_routing_rule {
     name                       = "routing-rule"
@@ -574,22 +574,22 @@ resource "azurerm_application_gateway" "appgw" {
     priority                   = 500
     rule_type                  = "Basic"
   }
-  request_routing_rule {
-    name                       = "routing-rule-https-private"
-    backend_address_pool_name  = "backend-pool-appsvc"
-    backend_http_settings_name = "backend-settings-https"
-    http_listener_name         = "listener-private-https"
-    priority                   = 400
-    rule_type                  = "Basic"
-  }
-  request_routing_rule {
-    name                       = "routing-rule-https-public"
-    backend_address_pool_name  = "backend-pool-appsvc"
-    backend_http_settings_name = "backend-settings-https"
-    http_listener_name         = "listener-public-https"
-    priority                   = 600
-    rule_type                  = "Basic"
-  }
+  # request_routing_rule {
+  #   name                       = "routing-rule-https-private"
+  #   backend_address_pool_name  = "backend-pool-appsvc"
+  #   backend_http_settings_name = "backend-settings-https"
+  #   http_listener_name         = "listener-private-https"
+  #   priority                   = 400
+  #   rule_type                  = "Basic"
+  # }
+  # request_routing_rule {
+  #   name                       = "routing-rule-https-public"
+  #   backend_address_pool_name  = "backend-pool-appsvc"
+  #   backend_http_settings_name = "backend-settings-https"
+  #   http_listener_name         = "listener-public-https"
+  #   priority                   = 600
+  #   rule_type                  = "Basic"
+  # }
 
   gateway_ip_configuration {
     name      = "appGatewayIpConfig"
