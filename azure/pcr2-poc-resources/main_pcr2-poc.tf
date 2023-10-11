@@ -293,14 +293,14 @@ module "kv_local_pe" {
   is_manual_connection = false
 
   privdns_rg_name = module.poc_rg.name
-  cname_zone      = "vault.azure.net"
-  a_zone          = "vaultcore.azure.net"
-  ttl             = 10
+  # cname_zone      = "vault.azure.net"
+  a_zone = "vaultcore.azure.net"
+  ttl    = 10
 
   tags = local.base_tags
 }
 #*/
-
+/*
 #--------------------------------------------------------------
 #   Application Gateway
 #--------------------------------------------------------------
@@ -1075,7 +1075,7 @@ module "sqlsvr_external_pe" {
   tags = local.base_tags
 }
 #*/
-
+/*
 #--------------------------------------------------------------
 #   Application Service Authentication App Registration
 #--------------------------------------------------------------
@@ -1350,7 +1350,7 @@ module "appsvc_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  cname_zone      = "azurewebsites.net"
+  # cname_zone      = "azurewebsites.net"
   a_zone          = "privatelink.azurewebsites.net"
   ttl             = 10
 
@@ -1541,7 +1541,7 @@ resource "azurerm_windows_function_app" "win_func_app" {
 #   is_manual_connection = false
 
 #   privdns_rg_name = module.poc_rg.name
-#   cname_zone      = "azurewebsites.net"
+#   # cname_zone      = "azurewebsites.net"
 #   a_zone          = "privatelink.azurewebsites.net"
 #   ttl             = 10
 
@@ -1555,7 +1555,7 @@ resource "azurerm_windows_function_app" "win_func_app" {
 #   private_ip_address = module.function_local_pe.private_ip_address
 
 #   privdns_rg_name = module.poc_rg.name
-#   cname_zone      = "azurewebsites.net"
+#   # cname_zone      = "azurewebsites.net"
 #   a_zone          = "privatelink.azurewebsites.net"
 #   ttl             = 10
 
