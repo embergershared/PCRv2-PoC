@@ -32,6 +32,13 @@
 
 
 #--------------------------------------------------------------
+#   Gathering External Public IP to ease deployment
+#--------------------------------------------------------------
+module "publicip" {
+  source = "../../../../tf-modules/publicip"
+}
+
+#--------------------------------------------------------------
 #   External Subscription Subnet for External PEs
 #--------------------------------------------------------------
 data "azurerm_virtual_network" "external_vnet" {
@@ -248,8 +255,8 @@ resource "azurerm_key_vault" "kv" {
   network_acls {
     bypass                     = "None" # "None" | "AzureServices"
     default_action             = "Deny"
-    ip_rules                   = [] # [module.publicip.public_ip]
-    virtual_network_subnet_ids = [] # [azurerm_subnet.appgw_subnet.id]
+    ip_rules                   = [module.publicip.public_ip] # []
+    virtual_network_subnet_ids = []
   }
 
   tags = local.base_tags
@@ -689,7 +696,7 @@ resource "azurerm_storage_account_network_rules" "drop_st_nr" {
 
   storage_account_id         = azurerm_storage_account.drop_st.id
   default_action             = "Deny"
-  ip_rules                   = []
+  ip_rules                   = [module.publicip.public_ip]
   virtual_network_subnet_ids = []
   bypass                     = ["None"]
 }
@@ -763,7 +770,7 @@ resource "azurerm_storage_account_network_rules" "archive_st_nr" {
 
   storage_account_id         = azurerm_storage_account.archive_st.id
   default_action             = "Deny"
-  ip_rules                   = []
+  ip_rules                   = [module.publicip.public_ip]
   virtual_network_subnet_ids = []
   bypass                     = ["None"]
 }
@@ -843,7 +850,7 @@ resource "azurerm_storage_account_network_rules" "app_svc_st_nr" {
 
   storage_account_id         = azurerm_storage_account.app_svc_st.id
   default_action             = "Deny"
-  ip_rules                   = []
+  ip_rules                   = [module.publicip.public_ip]
   virtual_network_subnet_ids = []
   bypass                     = ["None"]
 }
@@ -918,7 +925,7 @@ resource "azurerm_storage_account_network_rules" "sftp_st_nr" {
 
   storage_account_id         = azurerm_storage_account.sftp_st.id
   default_action             = "Deny"
-  ip_rules                   = [azurerm_public_ip.appsvc_int_natgw_pip.ip_address]
+  ip_rules                   = [azurerm_public_ip.appsvc_int_natgw_pip.ip_address, module.publicip.public_ip]
   virtual_network_subnet_ids = []
   bypass                     = ["None"]
 }
