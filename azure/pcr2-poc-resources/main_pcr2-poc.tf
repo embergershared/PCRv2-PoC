@@ -414,18 +414,18 @@ resource "azurerm_virtual_network_peering" "pcr2_to_appgw_vnet" {
 # }
 #   / TLS certificate used by App Gateway & App Service
 #     Following this setup: https://learn.microsoft.com/en-us/azure/application-gateway/configure-web-app?tabs=customdomain%2Cazure-portal
-resource "azurerm_key_vault_certificate" "tls_cert" {
-  name         = "${local.external_url_prefix}-tls-cert-kv"
-  key_vault_id = azurerm_key_vault.kv.id
+# resource "azurerm_key_vault_certificate" "tls_cert" {
+#   name         = "${local.external_url_prefix}-tls-cert-kv"
+#   key_vault_id = azurerm_key_vault.kv.id
 
-  certificate {
-    contents = filebase64(var.tls_cert_path)
-    password = var.tls_cert_pwd
-  }
-  # IMPORTANT NOTE: Integration between Application Gateway and Key vault is tricky
-  # Refer to: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs
-  # To go through the setup and use the PowerShell script in /data/AppGw-HttpsCert-from-KV.ps1
-}
+#   certificate {
+#     contents = filebase64(var.tls_cert_path)
+#     password = var.tls_cert_pwd
+#   }
+#   # IMPORTANT NOTE: Integration between Application Gateway and Key vault is tricky
+#   # Refer to: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs
+#   # To go through the setup and use the PowerShell script in /data/AppGw-HttpsCert-from-KV.ps1
+# }
 resource "azurerm_web_application_firewall_policy" "appgw_waf" {
   name                = lower("waf-policy-for-appgw-${local.full_suffix}")
   location            = module.poc_rg.location
@@ -510,24 +510,24 @@ resource "azurerm_application_gateway" "appgw" {
     port = 443
   }
 
-  http_listener {
-    name                           = "listener-private-https"
-    frontend_ip_configuration_name = "appGwPrivateFrontendIpIPv4"
-    frontend_port_name             = "port_443"
-    host_names                     = []
-    protocol                       = "Https"
-    require_sni                    = false
-    ssl_certificate_name           = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
-  }
-  http_listener {
-    name                           = "listener-public-https"
-    frontend_ip_configuration_name = "appGwPublicFrontendIpIPv4"
-    frontend_port_name             = "port_443"
-    host_names                     = []
-    protocol                       = "Https"
-    require_sni                    = false
-    ssl_certificate_name           = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
-  }
+  # http_listener {
+  #   name                           = "listener-private-https"
+  #   frontend_ip_configuration_name = "appGwPrivateFrontendIpIPv4"
+  #   frontend_port_name             = "port_443"
+  #   host_names                     = []
+  #   protocol                       = "Https"
+  #   require_sni                    = false
+  #   ssl_certificate_name           = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
+  # }
+  # http_listener {
+  #   name                           = "listener-public-https"
+  #   frontend_ip_configuration_name = "appGwPublicFrontendIpIPv4"
+  #   frontend_port_name             = "port_443"
+  #   host_names                     = []
+  #   protocol                       = "Https"
+  #   require_sni                    = false
+  #   ssl_certificate_name           = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
+  # }
   http_listener {
     name                           = "listener-public-http"
     frontend_ip_configuration_name = "appGwPublicFrontendIpIPv4"
@@ -602,12 +602,11 @@ resource "azurerm_application_gateway" "appgw" {
     capacity = 0
   }
 
-  ssl_certificate {
-    name     = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
-    data     = filebase64(var.tls_cert_path)
-    password = var.tls_cert_pwd
-
-  }
+  # ssl_certificate {
+  #   name     = "${azurerm_key_vault_certificate.tls_cert.name}-upload"
+  #   data     = filebase64(var.tls_cert_path)
+  #   password = var.tls_cert_pwd
+  # }
 }
 #   / Create Private DNS Zone and Endpoint for internal users from Hub
 resource "azurerm_private_dns_zone" "public_domain" {
