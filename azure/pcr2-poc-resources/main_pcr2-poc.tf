@@ -261,24 +261,24 @@ resource "azurerm_role_assignment" "terraform_role_to_kv_assignment" {
   principal_id         = data.azurerm_client_config.current.object_id
 }
 #   / Create an external Private Endpoint to access KV data plane from terraform
-module "kv_external_pe" {
-  providers = { azurerm = azurerm.external }
-  source    = "../terraform-modules/pe"
+# module "kv_external_pe" {
+#   providers = { azurerm = azurerm.external }
+#   source    = "../terraform-modules/pe"
 
-  resource_id = azurerm_key_vault.kv.id
+#   resource_id = azurerm_key_vault.kv.id
 
-  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
-  location             = data.azurerm_virtual_network.external_vnet.location
-  subnet_id            = data.azurerm_subnet.external_subnet.id
-  subresource_names    = ["vault"]
-  is_manual_connection = false
+#   resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+#   location             = data.azurerm_virtual_network.external_vnet.location
+#   subnet_id            = data.azurerm_subnet.external_subnet.id
+#   subresource_names    = ["vault"]
+#   is_manual_connection = false
 
-  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  a_zone          = "privatelink.vaultcore.azure.net"
-  ttl             = 10
+#   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+#   a_zone          = "privatelink.vaultcore.azure.net"
+#   ttl             = 10
 
-  tags = local.base_tags
-}
+#   tags = local.base_tags
+# }
 module "kv_local_pe" {
   source = "../terraform-modules/pe"
 
@@ -294,7 +294,7 @@ module "kv_local_pe" {
 
   privdns_rg_name = module.poc_rg.name
   # cname_zone      = "vault.azure.net"
-  a_zone = "vaultcore.azure.net"
+  a_zone = "privatelink.vaultcore.azure.net"
   ttl    = 10
 
   tags = local.base_tags
