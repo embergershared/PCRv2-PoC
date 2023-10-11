@@ -35,7 +35,7 @@
 #   Gathering External Public IP to ease deployment
 #--------------------------------------------------------------
 module "publicip" {
-  source = "../../../../tf-modules/publicip"
+  source = "../terraform-modules/publicip"
 }
 
 #--------------------------------------------------------------
