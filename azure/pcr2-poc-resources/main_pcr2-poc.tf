@@ -261,24 +261,25 @@ resource "azurerm_role_assignment" "terraform_role_to_kv_assignment" {
   principal_id         = data.azurerm_client_config.current.object_id
 }
 #   / Create an external Private Endpoint to access KV data plane from terraform
-# module "kv_external_pe" {
-#   providers = { azurerm = azurerm.external }
-#   source    = "../terraform-modules/pe"
+module "kv_external_pe" {
+  providers = { azurerm = azurerm.external }
+  source    = "../terraform-modules/pe"
 
-#   resource_id = azurerm_key_vault.kv.id
+  resource_id = azurerm_key_vault.kv.id
 
-#   resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
-#   location             = data.azurerm_virtual_network.external_vnet.location
-#   subnet_id            = data.azurerm_subnet.external_subnet.id
-#   subresource_names    = ["vault"]
-#   is_manual_connection = false
+  resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
+  location             = data.azurerm_virtual_network.external_vnet.location
+  subnet_id            = data.azurerm_subnet.external_subnet.id
+  subresource_names    = ["vault"]
+  is_manual_connection = false
 
-#   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-#   a_zone          = "privatelink.vaultcore.azure.net"
-#   ttl             = 10
+  privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
+  cname_zone      = null
+  a_zone          = null
+  ttl             = 10
 
-#   tags = local.base_tags
-# }
+  tags = local.base_tags
+}
 module "kv_local_pe" {
   source = "../terraform-modules/pe"
 
@@ -300,7 +301,7 @@ module "kv_local_pe" {
   tags = local.base_tags
 }
 #*/
-/*
+
 #--------------------------------------------------------------
 #   Application Gateway
 #--------------------------------------------------------------
@@ -729,7 +730,8 @@ module "drop_st_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  a_zone          = "privatelink.blob.core.windows.net"
+  cname_zone      = null
+  a_zone          = null
   ttl             = 10
 
   tags = local.base_tags
@@ -807,7 +809,8 @@ module "archive_st_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  a_zone          = "privatelink.blob.core.windows.net"
+  cname_zone      = null
+  a_zone          = null
   ttl             = 10
 
   tags = local.base_tags
@@ -881,7 +884,8 @@ module "app_svc_st_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  a_zone          = "privatelink.blob.core.windows.net"
+  cname_zone      = null
+  a_zone          = null
   ttl             = 10
 
   tags = local.base_tags
@@ -955,7 +959,8 @@ module "sftp_st_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  a_zone          = "privatelink.blob.core.windows.net"
+  cname_zone      = null
+  a_zone          = null
   ttl             = 10
 
   tags = local.base_tags
@@ -1069,7 +1074,8 @@ module "sqlsvr_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  a_zone          = "privatelink.database.windows.net"
+  cname_zone      = null
+  a_zone          = null
   ttl             = 10
 
   tags = local.base_tags
@@ -1351,7 +1357,8 @@ module "appsvc_external_pe" {
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
   # cname_zone      = "azurewebsites.net"
-  a_zone          = "privatelink.azurewebsites.net"
+  cname_zone      = null
+  a_zone          = null
   ttl             = 10
 
   tags = local.base_tags
@@ -1576,7 +1583,8 @@ module "function_external_pe" {
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  a_zone          = "privatelink.azurewebsites.net"
+  cname_zone      = null
+  a_zone          = null
   ttl             = 10
 
   tags = local.base_tags
