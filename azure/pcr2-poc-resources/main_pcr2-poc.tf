@@ -647,7 +647,7 @@ module "appgw_external_pe" {
   resource_group_name  = data.azurerm_subnet.external_subnet.resource_group_name
   location             = data.azurerm_virtual_network.external_vnet.location
   subnet_id            = data.azurerm_subnet.external_subnet.id
-  subresource_names    = [azurerm_application_gateway.appgw.frontend_ip_configuration[1].name]
+  subresource_names    = [azurerm_application_gateway.appgw.frontend_ip_configuration[0].name]
   is_manual_connection = false
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
