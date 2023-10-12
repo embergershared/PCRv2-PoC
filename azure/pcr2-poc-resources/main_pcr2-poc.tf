@@ -354,11 +354,12 @@ resource "azurerm_subnet" "appgw_subnet" {
 #   / Subnet for App Gateway Private Link integration
 resource "azurerm_subnet" "appgw_privlink_subnet" {
   # This subnet is used to create Private Link connection to App Gateway
-  name                                      = "snet-appgw-priv-link"
-  resource_group_name                       = module.poc_rg.name
-  virtual_network_name                      = azurerm_virtual_network.appgw_vnet.name
-  private_endpoint_network_policies_enabled = false
-  address_prefixes                          = [replace(azurerm_virtual_network.appgw_vnet.address_space[0], "0/24", "128/28")]
+  name                                          = "snet-appgw-priv-link"
+  resource_group_name                           = module.poc_rg.name
+  virtual_network_name                          = azurerm_virtual_network.appgw_vnet.name
+  private_endpoint_network_policies_enabled     = false
+  private_link_service_network_policies_enabled = true
+  address_prefixes                              = [replace(azurerm_virtual_network.appgw_vnet.address_space[0], "0/24", "128/28")]
 }
 #   / Private DNS Zones link to App Gateway VNet
 #     Link the required Private DNS Zones to App Gateway VNet to enable DNS resolution for App Gateway
