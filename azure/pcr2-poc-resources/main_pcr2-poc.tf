@@ -358,7 +358,7 @@ resource "azurerm_subnet" "appgw_privlink_subnet" {
   resource_group_name                           = module.poc_rg.name
   virtual_network_name                          = azurerm_virtual_network.appgw_vnet.name
   private_endpoint_network_policies_enabled     = false
-  private_link_service_network_policies_enabled = true
+  private_link_service_network_policies_enabled = false
   address_prefixes                              = [replace(azurerm_virtual_network.appgw_vnet.address_space[0], "0/24", "128/28")]
 }
 #   / Private DNS Zones link to App Gateway VNet
