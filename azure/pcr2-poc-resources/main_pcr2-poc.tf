@@ -1142,7 +1142,7 @@ resource "azuread_application" "azsp_app" {
     redirect_uris = [
       "http://localhost:5081/signin-oidc",
       "https://webapp-win-${local.full_suffix}.azurewebsites.net/.auth/login/aad/callback",
-      "https://${local.external_url_prefix}.${local.external_url_domain}/.auth/login/aad/callback",
+      # "https://${local.external_url_prefix}.${local.external_url_domain}/.auth/login/aad/callback",
     ]
 
     implicit_grant {
