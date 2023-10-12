@@ -502,7 +502,7 @@ resource "azurerm_application_gateway" "appgw" {
   frontend_ip_configuration {
     name                            = "appGwPrivateFrontendIpIPv4"
     private_ip_address_allocation   = "Static"
-    private_ip_address              = "192.168.24.133"
+    private_ip_address              = "192.168.24.10"
     private_link_configuration_name = "private-link-config-private"
     subnet_id                       = azurerm_subnet.appgw_subnet.id
   }
