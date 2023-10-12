@@ -253,8 +253,8 @@ resource "azurerm_key_vault" "kv" {
   # But it doesn't work, (App Gateway issue), removing it
   public_network_access_enabled = false
   network_acls {
-    bypass                     = "None" # "None" | "AzureServices"
-    default_action             = "Deny"
+    bypass                     = "None"                      # "None" | "AzureServices"
+    default_action             = "Allow"                     # "Allow" | "Deny"
     ip_rules                   = [module.publicip.public_ip] # []
     virtual_network_subnet_ids = []
   }
