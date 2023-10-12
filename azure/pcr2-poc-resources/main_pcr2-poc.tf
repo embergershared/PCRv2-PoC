@@ -254,7 +254,7 @@ resource "azurerm_key_vault" "kv" {
   public_network_access_enabled = false
   network_acls {
     bypass                     = "None"                      # "None" | "AzureServices"
-    default_action             = "Allow"                     # "Allow" | "Deny"
+    default_action             = "Allow"                     # "Allow" | "Deny" # TODO: For prod, set it to "Deny"
     ip_rules                   = [module.publicip.public_ip] # []
     virtual_network_subnet_ids = []
   }
@@ -269,6 +269,8 @@ resource "azurerm_role_assignment" "terraform_role_to_kv_assignment" {
 }
 #   / Create an external Private Endpoint to access KV data plane from terraform
 module "kv_external_pe" {
+  # TODO: For prod, comment this module
+
   providers = { azurerm = azurerm.external }
   source    = "../terraform-modules/pe"
 
@@ -696,7 +698,7 @@ resource "azurerm_storage_account_network_rules" "drop_st_nr" {
   ]
 
   storage_account_id         = azurerm_storage_account.drop_st.id
-  default_action             = "Deny"
+  default_action             = "Allow" # "Allow" | "Deny" # TODO: For prod, set it to "Deny"
   ip_rules                   = [module.publicip.public_ip]
   virtual_network_subnet_ids = []
   bypass                     = ["None"]
@@ -770,7 +772,7 @@ resource "azurerm_storage_account_network_rules" "archive_st_nr" {
   ]
 
   storage_account_id         = azurerm_storage_account.archive_st.id
-  default_action             = "Deny"
+  default_action             = "Allow" # "Allow" | "Deny" # TODO: For prod, set it to "Deny"
   ip_rules                   = [module.publicip.public_ip]
   virtual_network_subnet_ids = []
   bypass                     = ["None"]
@@ -804,6 +806,7 @@ module "archive_st_local_pe" {
   tags = local.base_tags
 }
 module "archive_st_external_pe" {
+  # TODO: For prod, uncomment to get access from external network to the archive account
   providers = { azurerm = azurerm.external }
   source    = "../terraform-modules/pe"
 
@@ -850,7 +853,7 @@ resource "azurerm_storage_account_network_rules" "app_svc_st_nr" {
   ]
 
   storage_account_id         = azurerm_storage_account.app_svc_st.id
-  default_action             = "Deny"
+  default_action             = "Allow" # "Allow" | "Deny" # TODO: For prod, set it to "Deny"
   ip_rules                   = [module.publicip.public_ip]
   virtual_network_subnet_ids = []
   bypass                     = ["None"]
@@ -879,6 +882,8 @@ module "app_svc_st_local_pe" {
   tags = local.base_tags
 }
 module "app_svc_st_external_pe" {
+  # TODO: For prod, comment this module
+
   providers = { azurerm = azurerm.external }
   source    = "../terraform-modules/pe"
 
@@ -900,6 +905,8 @@ module "app_svc_st_external_pe" {
 
 #   / SFTP Storage
 resource "azurerm_storage_account" "sftp_st" {
+  # TODO: Comment when a SFTP server is not needed anymore for Dev
+
   name                = lower(replace("st-${local.full_suffix}-sftp", "-", ""))
   resource_group_name = module.poc_rg.name
   location            = module.poc_rg.location
@@ -919,23 +926,29 @@ resource "azurerm_storage_account" "sftp_st" {
   lifecycle { ignore_changes = [tags["BuiltOn"]] }
 }
 resource "azurerm_storage_account_network_rules" "sftp_st_nr" {
+  # TODO: Comment when a SFTP server is not needed anymore for Dev
+
   # Prevents locking the Storage Account before all resources are created
   depends_on = [
     azurerm_storage_account.sftp_st
   ]
 
   storage_account_id         = azurerm_storage_account.sftp_st.id
-  default_action             = "Deny"
+  default_action             = "Allow" # "Allow" | "Deny" # TODO: For prod, set it to "Deny"
   ip_rules                   = [azurerm_public_ip.appsvc_int_natgw_pip.ip_address, module.publicip.public_ip]
   virtual_network_subnet_ids = []
   bypass                     = ["None"]
 }
 resource "azurerm_storage_container" "sftp_cont" {
+  # TODO: Comment when a SFTP server is not needed anymore for Dev
+
   name                  = "sftp-user1"
   storage_account_name  = azurerm_storage_account.sftp_st.name
   container_access_type = "private"
 }
 module "sftp_st_local_pe" {
+  # TODO: Comment when a SFTP server is not needed anymore for Dev
+
   source     = "../terraform-modules/pe"
   depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
 
@@ -954,6 +967,8 @@ module "sftp_st_local_pe" {
   tags = local.base_tags
 }
 module "sftp_st_external_pe" {
+  # TODO: Comment when a SFTP server is not needed anymore for Dev
+
   providers = { azurerm = azurerm.external }
   source    = "../terraform-modules/pe"
 
@@ -1069,6 +1084,8 @@ module "sqlsvr_local_pe" {
   tags = local.base_tags
 }
 module "sqlsvr_external_pe" {
+  # TODO: For Prod, keep only when access to Azure SQL Server is required
+
   providers = { azurerm = azurerm.external }
   source    = "../terraform-modules/pe"
 
@@ -1351,6 +1368,8 @@ module "appsvc_scm_local_privdns" {
 
 #   / Private Endpoint for External incoming connections
 module "appsvc_external_pe" {
+  # TODO: For Prod, required to publish updates
+
   providers = { azurerm = azurerm.external }
   source    = "../terraform-modules/pe"
 
@@ -1578,6 +1597,8 @@ resource "azurerm_windows_function_app" "win_func_app" {
 
 #   / Private Endpoint for External incoming connections (to launch http triggers ?)
 module "function_external_pe" {
+  # TODO: For Prod, required to publish updates
+
   providers = { azurerm = azurerm.external }
   source    = "../terraform-modules/pe"
 
