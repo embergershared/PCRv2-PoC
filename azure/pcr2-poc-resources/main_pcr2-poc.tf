@@ -251,7 +251,7 @@ resource "azurerm_key_vault" "kv" {
   # NOTE: AzureServices + subnet Id + Public access required for KV Private Endpoint use by Application Gateway
   # Ref: https://learn.microsoft.com/en-us/azure/application-gateway/key-vault-certs#verify-firewall-permissions-to-key-vault
   # But it doesn't work, (App Gateway issue), removing it
-  public_network_access_enabled = false
+  public_network_access_enabled = true # TODO: For prod, set it to "false"
   network_acls {
     bypass                     = "None"                      # "None" | "AzureServices"
     default_action             = "Allow"                     # "Allow" | "Deny" # TODO: For prod, set it to "Deny"
@@ -686,7 +686,7 @@ resource "azurerm_storage_account" "drop_st" {
   min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
   is_hns_enabled                  = false    #Enables Hierachical namespace, required for SFTP
   sftp_enabled                    = false
-  public_network_access_enabled   = false
+  public_network_access_enabled   = true # TODO: For prod, set it to "false"
 
   tags = local.base_tags
   lifecycle { ignore_changes = [tags["BuiltOn"]] }
@@ -760,7 +760,7 @@ resource "azurerm_storage_account" "archive_st" {
   min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
   is_hns_enabled                  = false
   sftp_enabled                    = false
-  public_network_access_enabled   = false
+  public_network_access_enabled   = true # TODO: For prod, set it to "false"
 
   tags = local.base_tags
   lifecycle { ignore_changes = [tags["BuiltOn"]] }
@@ -841,7 +841,7 @@ resource "azurerm_storage_account" "app_svc_st" {
   min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
   is_hns_enabled                  = false
   sftp_enabled                    = false
-  public_network_access_enabled   = false
+  public_network_access_enabled   = true # TODO: For prod, set it to "false"
 
   tags = local.base_tags
   lifecycle { ignore_changes = [tags["BuiltOn"]] }
@@ -920,7 +920,7 @@ resource "azurerm_storage_account" "sftp_st" {
   min_tls_version                 = "TLS1_2" #Configure the minimum required version of Transport Layer Security (TLS) for a storage account and require TLS Version1.2
   is_hns_enabled                  = true     #Enables Hierachical namespace, required for SFTP
   sftp_enabled                    = true
-  public_network_access_enabled   = true
+  public_network_access_enabled   = true # TODO: For prod, set it to "false"
 
   tags = local.base_tags
   lifecycle { ignore_changes = [tags["BuiltOn"]] }
