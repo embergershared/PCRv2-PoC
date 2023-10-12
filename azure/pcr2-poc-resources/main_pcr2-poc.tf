@@ -1397,7 +1397,8 @@ module "appsvc_scm_external_privdns" {
   record_name        = "${azurerm_windows_web_app.poc_app_svc.name}.scm"
   private_ip_address = module.appsvc_external_pe.private_ip_address
   privdns_rg_name    = data.azurerm_subnet.external_subnet.resource_group_name
-  a_zone             = "privatelink.azurewebsites.net"
+  cname_zone         = null
+  a_zone             = null
   ttl                = 10
 
   tags = local.base_tags
