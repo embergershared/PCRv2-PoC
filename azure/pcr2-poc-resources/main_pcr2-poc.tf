@@ -499,10 +499,10 @@ resource "azurerm_application_gateway" "appgw" {
   #   trusted_root_certificate_names      = []
   # }
 
-  frontend_ip_configuration {
-    name                 = "appGwPublicFrontendIpIPv4"
-    public_ip_address_id = azurerm_public_ip.appgw_pip.id
-  }
+  # frontend_ip_configuration {
+  #   name                 = "appGwPublicFrontendIpIPv4"
+  #   public_ip_address_id = azurerm_public_ip.appgw_pip.id
+  # }
   frontend_ip_configuration {
     name                            = "appGwPrivateFrontendIpIPv4"
     private_ip_address_allocation   = "Static"
@@ -540,7 +540,7 @@ resource "azurerm_application_gateway" "appgw" {
   # }
   http_listener {
     name                           = "listener-public-http"
-    frontend_ip_configuration_name = "appGwPublicFrontendIpIPv4"
+    frontend_ip_configuration_name = "appGwPrivateFrontendIpIPv4"
     frontend_port_name             = "port_80"
     host_names                     = []
     protocol                       = "Http"
