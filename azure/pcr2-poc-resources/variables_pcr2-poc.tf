@@ -11,6 +11,10 @@ variable "subsc_adm_short" {}
 variable "main_region_code" { default = null }
 variable "external_snet_pe_id" {}
 
+# Azure SQL Server admin
+variable "az_sql_admin_login" {}
+variable "az_sql_admin_object_id" {}
+
 # SFTP Connection
 variable "sftp_user_name" {}
 variable "sftp_user_pwd" {}

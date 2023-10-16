@@ -20,10 +20,8 @@
 # Sourced Plans Terraform files
 **/srcd-*.tf
 
-# All tfvars files
-*tfvars*
-# Except the ones in subscriptions/azint subfolders
-!subscriptions/azint/**/*tfvars*
+# All tfvars files secret
+**/*_secret*.tfvars
 
 # Ignore /various folder
 various/

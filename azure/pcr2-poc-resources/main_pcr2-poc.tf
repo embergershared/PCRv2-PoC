@@ -1053,8 +1053,8 @@ resource "azurerm_mssql_server" "poc_sql_server" {
 
   azuread_administrator {
     azuread_authentication_only = true
-    login_username              = "eb@mngenvmcap446692.onmicrosoft.com"
-    object_id                   = "16f07509-4609-4a32-a816-2c7178c313a3"
+    login_username              = var.az_sql_admin_login
+    object_id                   = var.az_sql_admin_object_id
   }
 }
 resource "azurerm_mssql_database" "poc_sql_db" {
@@ -1431,7 +1431,9 @@ resource "azurerm_role_assignment" "webapp_msi_kv_secret_user" {
 
 #     ========  WIN WEB APP POST DEPLOYMENT STEPS  ========
 
-# 1. To grant Win Web App's MSI access to the SQL Database, execute this T-SQL, logged with an Azure AD user:
+# 1. To grant Win Web App's MSI access to the SQL Database, execute this T-SQL, logged with an Azure AD user, without any quotes, neither single or double ones:
+#    See example here: ../docs/Create_AppSvc_ManagedIdentityUser_in_AzureSQLServer.jpg
+
 # CREATE USER ["${azurerm_windows_web_app.poc_app_svc.name}"] FROM EXTERNAL PROVIDER;
 # ALTER ROLE db_datareader ADD MEMBER ["${azurerm_windows_web_app.poc_app_svc.name}"];
 # ALTER ROLE db_datawriter ADD MEMBER ["${azurerm_windows_web_app.poc_app_svc.name}"];
@@ -1443,8 +1445,8 @@ resource "azurerm_role_assignment" "webapp_msi_kv_secret_user" {
 
 # 3. Publish the Application from Visual Studio (or CD Pipeline)
 
-# 4. Upload request-data.csv in the the "anomaly-data" container of the Archive Storage Account
-#    Source file is here: https://raw.githubusercontent.com/Azure/azure-sdk-for-python/main/sdk/anomalydetector/azure-ai-anomalydetector/samples/sample_data/request-data.csv
+# 4. Upload the dile ../data/request-data.csv in the the "anomaly-data" container of the Archive Storage Account
+#    (Source file is here: https://raw.githubusercontent.com/Azure/azure-sdk-for-python/main/sdk/anomalydetector/azure-ai-anomalydetector/samples/sample_data/request-data.csv)
 
 # 5. Follow the instructions to configure App Service with Application Gateway:
 #     https://learn.microsoft.com/en-us/azure/application-gateway/configure-web-app?tabs=customdomain%2Cazure-portal
