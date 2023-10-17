@@ -1451,7 +1451,6 @@ resource "azurerm_role_assignment" "webapp_msi_kv_secret_user" {
 # 5. Follow the instructions to configure App Service with Application Gateway:
 #     https://learn.microsoft.com/en-us/azure/application-gateway/configure-web-app?tabs=customdomain%2Cazure-portal
 
-/*
 #--------------------------------------------------------------
 #   Azure Function App
 #--------------------------------------------------------------
@@ -1630,7 +1629,8 @@ module "function_scm_external_privdns" {
   private_ip_address = module.function_external_pe.private_ip_address
 
   privdns_rg_name = data.azurerm_subnet.external_subnet.resource_group_name
-  a_zone          = "privatelink.azurewebsites.net"
+  cname_zone      = null
+  a_zone          = null
   ttl             = 10
 
   tags = local.base_tags
