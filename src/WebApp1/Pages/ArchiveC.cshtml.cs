@@ -38,7 +38,14 @@ namespace WebApp1.Pages
             var containerName = "pcr2-poc-" + Guid.NewGuid().ToString();
 
             // Create the container and return a container client object
-            _ = await blobServiceClient.CreateBlobContainerAsync(containerName);
+            try
+            {
+                _ = await blobServiceClient.CreateBlobContainerAsync(containerName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"CreateBlobContainerAsync() threw an exception: {ex}");
+            }
 
             ViewData["actionDisplay"] = $"Created container {containerName} in Storage account {stAcctName}";
 

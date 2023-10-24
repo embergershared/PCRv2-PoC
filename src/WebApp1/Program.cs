@@ -19,32 +19,42 @@ using Microsoft.IdentityModel.Tokens;
 // Ref: https://learn.microsoft.com/en-us/aspnet/core/data/ef-rp/intro?view=aspnetcore-7.0&tabs=visual-studio#create-the-web-app-project
 
 #region Program.cs specific logger instance
-using var loggerFactory = LoggerFactory.Create(builder =>
-{
-    builder.AddSimpleConsole(i => i.ColorBehavior = LoggerColorBehavior.Disabled);
-});
-var logger = loggerFactory.CreateLogger<Program>();
+var logger = LoggerFactory
+    .Create(builder => builder
+        // add console as logging target
+        .AddConsole()
+        // add debug output as logging target
+        .AddDebug()
+        // set minimum level to Trace
+        .SetMinimumLevel(LogLevel.Trace))
+    .CreateLogger<Program>();
+
+logger.LogInformation("Program.cs: Logger<Program> created");
 #endregion
 
 // Properties
 var hasDbConnectivity = false;
 
 #region   ===============   CREATING THE APP BUILDER   ===============
+logger.LogInformation("Program.cs: Invoking WebApplication.CreateBuilder(args)");
 var builder = WebApplication.CreateBuilder(args);
 
 // Add logging to the WebApplication
+logger.LogTrace("Program.cs: Adding Logging");
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
 // Add Microsoft Identity Web Authentication
+logger.LogTrace("Program.cs: Adding Microsoft Identity Web Authentication");
 IEnumerable<string> initialScopes = builder.Configuration["DownstreamApi:Scopes"]?.Split(' ');
 builder.Services.AddMicrosoftIdentityWebAppAuthentication(builder.Configuration, "AzureAd")
     .EnableTokenAcquisitionToCallDownstreamApi(initialScopes)
     .AddDownstreamWebApi("DownstreamApi", builder.Configuration.GetSection("DownstreamApi"))
     .AddInMemoryTokenCaches();
-    // Consider caching the token to scale: https://aka.ms/msal-net-cca-token-cache-serialization
+// Consider caching the token to scale: https://aka.ms/msal-net-cca-token-cache-serialization
 
 // Add Razor Pages, MVC controller and Microsoft Identity UI
+logger.LogTrace("Program.cs: Adding Services");
 builder.Services
     .AddRazorPages()
     .AddRazorPagesOptions(options =>
@@ -64,16 +74,19 @@ builder.Services
     .AddMicrosoftIdentityUI();
 
 // Entity Framework DB Context to SQL Server
+logger.LogTrace("Program.cs: Adding EFCore DbContext using SqlServer");
 try
 {
     var connectionString = builder.Configuration.GetConnectionString("WebApp1EfDbContext-MI");
     if (connectionString.IsNullOrEmpty())
     {
-       logger.LogError($"Program.cs: Value for ConnectionString: 'WebApp1EfDbContext-MI' not found.");
+       logger.LogWarning($"Program.cs: Value for ConnectionString: 'WebApp1EfDbContext-MI' not found");
        hasDbConnectivity = false;
     }
     else
     {
+        logger.LogDebug($"Program.cs: Value for ConnectionString: 'WebApp1EfDbContext-MI' found: '{connectionString}'");
+
         builder.Services.AddDbContext<WebApp1EfDbContext>(options =>
             options.UseSqlServer(connectionString));
 
@@ -90,7 +103,10 @@ catch (Exception e)
 }
 
 // Get access to HttpContext
+logger.LogTrace("Program.cs: Adding HttpContextAccessor service");
 builder.Services.AddHttpContextAccessor();
+
+logger.LogInformation("Program.cs: Done adding to builder");
 #endregion
 
 #region   ===============   BUILDING THEN RUN THE APP  ===============
@@ -98,29 +114,37 @@ var app = builder.Build();
 app.Logger.LogInformation("Program.cs: builder.Build() invoked");
 
 // Activate Authentication and Authorization
+app.Logger.LogTrace("Program.cs: Use AuthN & AuthZ");
 app.UseAuthentication();
 app.UseAuthorization();
 
 // Comes from NuGet Microsoft.AspNetCore.HttpOverrides
+app.Logger.LogTrace("Program.cs: Use ForwardedHeaders");
 app.UseForwardedHeaders();
 
 // Configure the HTTP request pipeline if in Dev environment
-if (!app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error");
-    app.MapControllers().AllowAnonymous();
+    // For Dev environments
+    app.Logger.LogTrace("Program.cs: Use Development settings");
+    app.UseDeveloperExceptionPage();
+    app.UseMigrationsEndPoint();
 }
 else
 {
-    app.UseDeveloperExceptionPage();
-    app.UseMigrationsEndPoint();
-    app.MapControllers();
+    // For Other environments
+    app.Logger.LogTrace("Program.cs: Use NON Development settings");
+    app.UseExceptionHandler("/Error");
+    //app.MapControllers().AllowAnonymous();
 }
+
+app.Logger.LogTrace("Program.cs: Map Controllers");
+app.MapControllers();
 
 // Create database if not existing
 if (hasDbConnectivity)
 {
-    app.Logger.LogInformation("Program.cs: Initialize Database with EF");
+    app.Logger.LogTrace("Program.cs: Initialize Database with EF");
     using var scope = app.Services.CreateScope();
     var services = scope.ServiceProvider;
 
@@ -130,18 +154,23 @@ if (hasDbConnectivity)
 }
 else
 {
-    app.Logger.LogWarning("Program.cs: Launching Web App without Database connectivity");
+    app.Logger.LogWarning("Program.cs: Launching Web App WITHOUT Database connectivity");
 }
 
+app.Logger.LogTrace("Program.cs: Use HttpsRedirection");
 app.UseHttpsRedirection();
+
+app.Logger.LogTrace("Program.cs: Use StaticFiles");
 app.UseStaticFiles();
 
+app.Logger.LogTrace("Program.cs: Use Routing");
 app.UseRouting();
 
+app.Logger.LogTrace("Program.cs: Map RazorPages");
 app.MapRazorPages();
 
 Config.App["DbIsAccessible"] = hasDbConnectivity.ToString();
 
-app.Logger.LogInformation("Program.cs: app.Run() invoked");
+app.Logger.LogInformation("Program.cs: Invoke app.Run()");
 app.Run();
 #endregion

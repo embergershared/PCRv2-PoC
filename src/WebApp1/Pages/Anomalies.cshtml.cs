@@ -28,7 +28,7 @@ namespace WebApp1.Pages
 
         public async Task OnGetAsync()
         {
-            _logger.LogInformation("AnomaliesModel.cshtml.cs: OnGetAsync() invoked");
+            _logger.LogInformation($"AnomaliesModel.cshtml.cs: OnGetAsync() invoked");
 
             var endpoint = _configuration.GetValue<string>("AnDetEndpoint") ??
                            throw new InvalidOperationException(
@@ -64,7 +64,15 @@ namespace WebApp1.Pages
             var blobClient = blobContainerClient.GetBlobClient(blobName);
 
             // Download blob
-            var content = await DownloadBlobToStringAsync(blobClient);
+            var content = string.Empty;
+            try
+            {
+                content = await DownloadBlobToStringAsync(blobClient);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"DownloadBlobToStringAsync() threw an exception: {ex}");
+            }
 
             // Process data input
             var data = content.Split("\r\n");
