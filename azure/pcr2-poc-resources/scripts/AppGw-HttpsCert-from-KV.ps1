@@ -9,7 +9,7 @@
 # Connect to Subscription
 Connect-AzAccount
 Get-AzSubscription
-Set-AzContext -Subscription "34144584-4817-47a0-a912-bd00bae76495"
+Set-AzContext -Subscription "<Id>"
 
 # Get the Application Gateway we want to modify
 $appgw = Get-AzApplicationGateway -Name "appgw-waf-use2-s4-pcr2-poc" -ResourceGroupName "rg-use2-s4-pcr2-poc"
